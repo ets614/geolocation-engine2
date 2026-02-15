@@ -36,13 +36,14 @@ async def health_check():
 
 
 # Error handlers
-@app.exception_handler(400)
-async def bad_request_handler(request: Request, exc: Exception):
-    """Handle 400 Bad Request errors."""
-    return JSONResponse(
-        status_code=400,
-        content={"detail": "Bad request"},
-    )
+# Temporarily disabled to see real validation errors
+# @app.exception_handler(400)
+# async def bad_request_handler(request: Request, exc: Exception):
+#     """Handle 400 Bad Request errors."""
+#     return JSONResponse(
+#         status_code=400,
+#         content={"detail": "Bad request"},
+#     )
 
 
 @app.exception_handler(404)
