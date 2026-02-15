@@ -50,16 +50,17 @@
 │  └──────────────────────┬──────────────────────────────┘    │
 │                         │                                     │
 │  ┌──────────────────────▼──────────────────────────────┐    │
-│  │ FormatTranslationService                            │    │
-│  │  • Normalize confidence to 0-1 scale                │    │
-│  │  • Build GeoJSON Feature (RFC 7946)                 │    │
-│  │  • Include properties (source, confidence, flags)   │    │
+│  │ CotService                                          │    │
+│  │  • Map object class to CoT type codes               │    │
+│  │  • Map confidence flags to color codes              │    │
+│  │  • Build CoT XML with point/detail elements         │    │
+│  │  • Generate remarks with detection metadata         │    │
 │  └──────────────────────┬──────────────────────────────┘    │
 │                         │                                     │
 │  ┌──────────────────────▼──────────────────────────────┐    │
-│  │ TACOutputService                                    │    │
-│  │  • Push GeoJSON to TAK Server                       │    │
-│  │  • Handle connection failures                       │    │
+│  │ TAK Push Service                                    │    │
+│  │  • HTTP PUT CoT XML to TAK Server /CoT endpoint     │    │
+│  │  • Handle connection failures & async non-blocking  │    │
 │  │  • Mark SYNCED on success                           │    │
 │  └──────────────────┬───────────────────┬──────────────┘    │
 │                     │                   │                    │
@@ -220,77 +221,84 @@ class GeolocationValidationService:
 
 ---
 
-#### 3. FormatTranslationService
+#### 3. CotService
 
-**Responsibility**: Transform validated detections to standardized GeoJSON format
+**Responsibility**: Generate Cursor on Target (CoT) XML for TAK/ATAK systems
 
 **Interface**:
 ```python
-class FormatTranslationService:
-    def transform(self, detection: Detection) -> GeoJSONFeature:
+class CotService:
+    def generate_cot_xml(self, detection: Detection, geolocation: GeolocationResult) -> str:
         """
-        Transform Detection to RFC 7946 GeoJSON Feature
+        Generate CoT XML from detection and geolocation result
 
         Args:
-            detection: Validated detection
+            detection: Detection with object_class, ai_confidence, timestamp
+            geolocation: Geolocation result with coordinates, uncertainty, confidence_flag
 
         Returns:
-            GeoJSON Feature (RFC 7946 compliant)
+            CoT XML string (TAK-compatible)
         """
         pass
 ```
 
 **Responsibilities**:
-- Normalize confidence to 0-1 scale (preserve original)
-- Build GeoJSON geometry (Point with [longitude, latitude])
-- Include properties (source, confidence, accuracy_flag, timestamp, audit trail)
-- Validate RFC 7946 compliance
-- Handle multiple source formats consistently
+- Map object_class to CoT type code (b-m-p-s-u-c for vehicle, etc.)
+- Map confidence_flag to color code (GREEN/-65536, YELLOW/-256, RED/-16711936)
+- Build CoT XML with event, point (lat/lon/ce), detail (link/color/remarks/contact) elements
+- Include remarks with AI class, AI confidence %, geo confidence flag, accuracy ±Xm
+- Generate unique UIDs and callsigns for TAK display
 
 **Inputs**:
-- Validated Detection with accuracy_flag
+- Detection with object_class, ai_confidence, camera_id, timestamp
+- GeolocationResult with calculated_lat, calculated_lon, uncertainty_radius_meters, confidence_flag
 
 **Outputs**:
-- GeoJSON Feature (JSON string or dict)
-- Transform event (to audit trail)
+- CoT XML string (TAK-parseable)
+- Generation event (to audit trail)
 
 **Performance**:
 - Latency: <5ms per detection
-- Compliance: 100% RFC 7946 valid
+- Compliance: 100% TAK-compatible CoT XML
 
 ---
 
-#### 4. TACOutputService
+#### 4. TAK Push (via CotService.push_to_tak_server)
 
-**Responsibility**: Deliver validated GeoJSON to TAK/ATAK systems
+**Responsibility**: Deliver CoT XML to TAK Server asynchronously
 
 **Interface**:
 ```python
-class TACOutputService:
-    async def output(self, geojson: GeoJSONFeature) -> None:
+class CotService:
+    async def push_to_tak_server(self, cot_xml: str) -> bool:
         """
-        Send GeoJSON to TAK Server
+        Send CoT XML to TAK Server via HTTP PUT
 
         Args:
-            geojson: RFC 7946 GeoJSON Feature
+            cot_xml: CoT XML string
+
+        Returns:
+            bool: True if successful, False otherwise
 
         Side effects:
-            - Sends to TAK Server
+            - Sends to TAK Server via HTTP PUT /CoT
+            - Returns immediately (non-blocking)
             - Marks SYNCED on success
-            - Queues locally on failure
+            - Falls back to queue on failure
         """
         pass
 ```
 
 **Responsibilities**:
-- HTTP client with timeout/retry handling
-- Batch delivery for high-volume streams
-- Mark as SYNCED on success
+- HTTP PUT client with timeout handling (5 second timeout)
+- Async, non-blocking push (doesn't block detection processing)
+- Mark as SYNCED on success (HTTP 200/201/204)
 - Fall back to OfflineQueueService on failure
-- Exponential backoff on connection failures
+- Log errors for monitoring
+- Graceful degradation when TAK unavailable
 
 **Inputs**:
-- GeoJSON Feature ready for output
+- CoT XML ready for output
 
 **Outputs**:
 - Detection marked SYNCED (remote)
@@ -300,6 +308,7 @@ class TACOutputService:
 **Performance**:
 - Latency: <2 seconds end-to-end from ingestion
 - Delivery: 99%+ of valid detections reach TAK
+- Non-blocking: Detection accepted within 100ms regardless of TAK status
 
 ---
 
@@ -548,70 +557,75 @@ class AuditTrailService:
 
 ## Service Interaction Flows
 
-### Happy Path: Detection Ingestion to Map Display
+### Happy Path: Detection Ingestion to TAK Map Display
 
 ```
-1. External API sends JSON detection
+1. Camera detects object in image (pixel coordinates + camera metadata)
    ↓
-2. REST API Adapter receives HTTP POST
+2. REST API Adapter receives HTTP POST with image_base64, pixel_x, pixel_y, sensor metadata
    ↓
-3. DetectionIngestionService.ingest()
-   - Parse JSON
-   - Extract fields: lat, lon, conf, timestamp
-   - Preserve original
+3. DetectionService.accept_detection()
+   - Parse image + pixel coordinates
+   - Extract sensor metadata (camera pose, intrinsics)
    ↓
-4. GeolocationValidationService.validate()
-   - Validate coordinate ranges
-   - Check accuracy metadata
-   - Set accuracy_flag (GREEN/YELLOW/RED)
+4. GeolocationCalculationService.calculate()
+   - Pinhole camera model
+   - Ray-ground plane intersection (photogrammetry)
+   - Output: calculated_lat, calculated_lon, uncertainty_radius_m
    ↓
-5. AuditTrailService.log_event("validated")
+5. Confidence calculation
+   - Ray-to-ground angle
+   - Camera elevation
+   - Output: confidence_flag (GREEN/YELLOW/RED)
    ↓
-6. FormatTranslationService.transform()
-   - Normalize confidence to 0-1
-   - Build GeoJSON Feature
+6. AuditTrailService.log_event("geolocated")
    ↓
-7. AuditTrailService.log_event("transformed")
+7. CotService.generate_cot_xml()
+   - Map object_class to CoT type code
+   - Map confidence_flag to color code
+   - Build CoT XML with point (lat/lon/ce) and detail (remarks/contact)
    ↓
-8. TACOutputService.output()
-   - HTTP PUT GeoJSON to TAK Server
-   - Mark SYNCED
+8. AuditTrailService.log_event("cot_generated")
    ↓
-9. AuditTrailService.log_event("output_success")
+9. CotService.push_to_tak_server() [async, non-blocking]
+   - HTTP PUT CoT XML to TAK Server /CoT endpoint
+   - Mark SYNCED on success
    ↓
-10. Detection appears on TAK map within 2 seconds
+10. AuditTrailService.log_event("output_success")
+    ↓
+11. Detection appears on TAK map with correct symbology within 2 seconds
 ```
 
 ### Error Path: Network Failure
 
 ```
-1-7. [Same as happy path]
+1-8. [Same as happy path: detection processed through photogrammetry to CoT generation]
    ↓
-8. TACOutputService.output()
-   - Attempt HTTP PUT to TAK Server
-   - Connection timeout
+9. CotService.push_to_tak_server() [async, non-blocking]
+   - Attempt HTTP PUT CoT XML to TAK Server
+   - Connection timeout or connection refused
    ↓
-9. TACOutputService catches NetworkError
-   - Calls OfflineQueueService.enqueue(detection)
-   ↓
-10. OfflineQueueService.enqueue()
-    - Write to SQLite queue (PENDING_SYNC)
+10. CotService catches NetworkError
+    - Calls OfflineQueueService.enqueue(cot_xml, detection_id)
+    ↓
+11. OfflineQueueService.enqueue()
+    - Write CoT XML to SQLite queue (PENDING_SYNC)
     - Update detection status: "QUEUED"
     ↓
-11. AuditTrailService.log_event("queued_offline")
+12. AuditTrailService.log_event("queued_offline")
     ↓
-12. (Later) OfflineQueueService.monitor_connectivity()
-    - Detects TAK Server online
+13. OfflineQueueService.monitor_connectivity()
+    - Detects TAK Server online (periodically checks)
     - Calls sync()
     ↓
-13. OfflineQueueService.sync()
-    - Batch load all PENDING_SYNC items
+14. OfflineQueueService.sync()
+    - Batch load all PENDING_SYNC CoT items
     - HTTP PUT each to TAK Server
     - Mark SYNCED
     ↓
-14. AuditTrailService.log_event("sync_success")
+15. AuditTrailService.log_event("sync_success")
     ↓
-15. Detection now appears on TAK map (with timestamp showing it's from earlier)
+16. Detection now appears on TAK map (with timestamp showing it's from earlier)
 ```
 
 ---

@@ -178,8 +178,8 @@ phases:
           - "Health check responds within 2 seconds of startup"
 
   - phase_id: "02"
-    title: "Core Features - Detection to GeoJSON"
-    description: "Implement core business logic: detection ingestion, geolocation validation (killer feature), GeoJSON transformation, TAK output, and audit trail integration"
+    title: "Core Features - Detection to CoT"
+    description: "Implement core business logic: detection ingestion, photogrammetry-based geolocation validation (killer feature), CoT XML transformation, TAK output, and audit trail integration"
     duration: "3 weeks"
 
     steps:
@@ -235,56 +235,58 @@ phases:
           - "All 15+ test scenarios passing"
 
       - step_id: "02-03"
-        title: "Implement FormatTranslationService (to GeoJSON RFC 7946)"
+        title: "Implement CotService (CoT XML generation)"
         description: |
-          Create service transforming validated detections to RFC 7946 compliant GeoJSON
-          Features. Normalize confidence to 0-1 scale (preserve original), build geometry
-          as Point [longitude, latitude], include all metadata properties.
+          Create service transforming validated detections with geolocation results to Cursor on Target (CoT)
+          XML format for TAK/ATAK consumption. Map object classes to CoT type codes (vehicle, person, aircraft, fire),
+          map confidence flags to color codes (GREEN/YELLOW/RED), include accuracy as CEP (Circular Error Probable),
+          and preserve all metadata in remarks and contact elements.
         acceptance_criteria:
-          - "Output is valid GeoJSON Feature per RFC 7946 specification"
-          - "Geometry uses [longitude, latitude] coordinate order"
-          - "Confidence normalized to 0-1 scale with original preserved in properties"
-          - "Properties include: source, confidence, accuracy_flag, timestamp, audit_trail_id"
-          - "GeoJSON output validates with standard GeoJSON parsers"
+          - "Output is valid CoT XML schema (TAK-compatible)"
+          - "Object class mapped to correct ATAK type code (b-m-p-s-u-c for vehicle, etc.)"
+          - "Confidence flag mapped to color code (GREEN/-65536, YELLOW/-256, RED/-16711936)"
+          - "CEP (ce attribute) set to uncertainty_radius_meters from geolocation calculation"
+          - "Remarks include: AI class, AI confidence%, geo confidence flag, accuracy ±Xm"
+          - "TAK Server accepts and displays CoT detection with correct symbology"
         files_to_modify:
-          - "src/services/format_translation_service.py"
-          - "src/models/geojson.py"
-          - "tests/unit/test_format_translation_service.py"
-          - "tests/unit/test_geojson_validation.py"
-          - "tests/integration/test_format_scenarios.py"
+          - "src/services/cot_service.py"
+          - "src/models/schemas.py"
+          - "tests/unit/test_cot_service.py"
+          - "tests/integration/test_cot_generation.py"
         effort_estimate: "1.5 days"
         dependencies: ["02-02"]
         risk_level: "LOW"
         success_metrics:
-          - "Translation latency <5ms per detection"
-          - "100% of valid detections produce RFC 7946 compliant GeoJSON"
-          - "GeoJSON output passes linter validation"
+          - "CoT generation latency <5ms per detection"
+          - "100% of valid detections produce TAK-compatible CoT XML"
+          - "All 15+ CoT generation tests passing"
 
       - step_id: "02-04"
-        title: "Implement TACOutputService (TAK Server integration)"
+        title: "Implement TAK Server push (HTTP PUT with CoT XML)"
         description: |
-          Create service outputting GeoJSON Features to TAK Server subscription endpoint
-          via HTTP PUT. Implement connection timeout handling, exponential backoff retry
-          logic, and fallback to offline queue on network failure.
+          Create service outputting CoT XML to TAK Server subscription endpoint via HTTP PUT.
+          Implement async, non-blocking push with connection timeout handling, exponential
+          backoff retry logic, and graceful fallback to offline queue on network failure.
         acceptance_criteria:
-          - "Valid GeoJSON sent to TAK Server via HTTP PUT"
-          - "Successful output marked SYNCED in detection record"
-          - "Network timeout (>5s) triggers queue fallback"
-          - "Connection refused errors logged and queued for retry"
-          - "Exponential backoff: 100ms → 150ms → 225ms (capped 30s, max 5 attempts)"
+          - "Valid CoT XML sent to TAK Server via HTTP PUT /CoT endpoint"
+          - "Successful push marked SYNCED in detection record and audit trail"
+          - "Network timeout (>5s) triggers graceful fallback to offline queue"
+          - "Connection refused errors logged with error code and queued for retry"
+          - "TAK push is async/non-blocking; detection processing continues"
+          - "Push success rate >99% in normal network conditions"
         files_to_modify:
-          - "src/services/tac_output_service.py"
-          - "src/adapters/tak_integration_adapter.py"
-          - "tests/unit/test_tac_output_service.py"
-          - "tests/integration/test_tak_integration.py"
+          - "src/services/cot_service.py"
+          - "src/api/routes.py"
+          - "tests/unit/test_cot_service.py"
+          - "tests/integration/test_tak_push.py"
           - "tests/integration/test_tak_failure_scenarios.py"
-        effort_estimate: "2 days"
+        effort_estimate: "1.5 days"
         dependencies: ["02-03"]
         risk_level: "MEDIUM"
         success_metrics:
-          - "TAK output latency <2 seconds end-to-end"
+          - "TAK push latency <2 seconds end-to-end"
           - "99%+ delivery success rate in normal conditions"
-          - "Graceful degradation when TAK offline"
+          - "Graceful degradation when TAK offline (queue fallback)"
 
       - step_id: "02-05"
         title: "Implement AuditTrailService event logging"
@@ -638,10 +640,10 @@ summary:
       focus: "Infrastructure and core service structure"
 
     - phase: "02"
-      name: "Core Features"
+      name: "Core Features - Detection to CoT"
       duration_weeks: 3
       step_count: 5
-      focus: "Detection processing pipeline"
+      focus: "Geolocation calculation and CoT transformation for TAK"
 
     - phase: "03"
       name: "Offline-First & Resilience"
@@ -723,9 +725,10 @@ quality_gates:
 
   - phase: "02"
     gates:
-      - "End-to-end detection ingestion to GeoJSON works"
+      - "End-to-end detection ingestion to CoT XML works"
+      - "TAK Server accepts and displays CoT detections"
       - "Audit trail captures all events"
-      - "Green flag accuracy >95% on test set"
+      - "Confidence flag accuracy >95% on test set"
 
   - phase: "03"
     gates:

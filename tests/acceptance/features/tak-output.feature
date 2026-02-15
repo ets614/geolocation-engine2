@@ -1,66 +1,72 @@
 @feature_us004
-Feature: Output to TAK GeoJSON
+Feature: Output to TAK CoT XML
   As a command team dispatcher
-  I want detections to appear on the tactical map in real-time
+  I want detections to appear on the tactical map in real-time via CoT
   So that I can make operational decisions with current information
 
   Background:
-    Given the TAK output service is running
+    Given the CoT service is running
     And TAK server is available at configured endpoint
     And output latency target is <2 seconds
     And reliability target is >99% delivery rate
 
   @happy_path @smoke @milestone_1
   Scenario: Detection appears on TAK map in real-time
-    Given a validated GeoJSON detection is ready for output
-    And TAK Server is connected and accepting updates
-    When the system outputs the detection to TAK subscription endpoint
-    Then TAK Server receives the GeoJSON Feature
-    And HTTP response is 200 OK
+    Given a validated CoT XML detection is ready for output
+    And TAK Server is connected and accepting CoT updates
+    When the system outputs the detection to TAK Server via HTTP PUT /CoT
+    Then TAK Server receives the CoT XML
+    And HTTP response is 200 OK or 201 Created
     And detection appears on dispatcher's map within 2 seconds
-    And map marker shows coordinates correctly [40.7128, -74.0060]
-    And accuracy badge shows confidence level (GREEN/YELLOW/RED)
-    And source label shows "Satellite Fire API"
-    And operator can click marker for full properties
+    And map marker shows coordinates correctly at [32.1234, -117.5678]
+    And confidence circle shows accuracy (GREEN/YELLOW/RED)
+    And detection type shows correct ATAK symbology (vehicle, person, etc.)
+    And operator can click marker for full CoT properties
     And sync_status is marked SYNCED in audit trail
 
   @happy_path @milestone_1
-  Scenario: Fire detection flows from satellite API to dispatcher map
-    Given a satellite fire detection with:
+  Scenario: Fire detection flows through photogrammetry to TAK map
+    Given a fire detection with image pixel coordinates:
       | field              | value              |
-      | latitude           | 32.1234            |
-      | longitude          | -117.5678          |
-      | confidence         | 0.92               |
-      | type               | fire               |
-      | timestamp          | 2026-02-17T14:35:42Z |
-    And the system timestamp is 2026-02-17T14:35:43Z
+      | pixel_x            | 640                |
+      | pixel_y            | 480                |
+      | camera_lat         | 32.1200            |
+      | camera_lon         | -117.5700          |
+      | camera_elevation   | 1000               |
+      | focal_length       | 50                 |
+      | ai_confidence      | 0.92               |
+      | object_class       | fire               |
+      | timestamp          | 2026-02-15T14:35:42Z |
+    And the system timestamp is 2026-02-15T14:35:43Z
     When the detection goes through the full pipeline:
-      | step     | timestamp | action                           |
-      | ingest   | 14:35:43  | API returns detection            |
-      | validate | 14:35:43  | Geolocation validated GREEN      |
-      | transform| 14:35:44  | GeoJSON built                    |
-      | output   | 14:35:44  | Sent to TAK subscription         |
-      | receive  | 14:35:45  | TAK Client receives update       |
+      | step          | timestamp | action                                |
+      | accept        | 14:35:43  | Detection received with pixels       |
+      | geolocate     | 14:35:43  | Photogrammetry calculates coordinates|
+      | validate      | 14:35:43  | Confidence flag calculated GREEN     |
+      | cot_generate  | 14:35:44  | CoT XML built with type code         |
+      | tak_push      | 14:35:44  | PUT /CoT sent to TAK Server         |
+      | receive       | 14:35:45  | TAK Client receives update           |
     Then detection appears on dispatcher's map by 14:35:45
     And end-to-end latency is 3 seconds (target <2s)
-    And dispatcher sees: Fire marker at coordinates with GREEN flag
+    And dispatcher sees: Fire symbol at calculated coordinates with GREEN circle
+    And accuracy circle matches photogrammetry uncertainty (±Xm)
     And dispatcher can dispatch resources immediately
 
   @error_handling @resilience
   Scenario: Queue and sync when TAK Server temporarily offline
-    Given a GeoJSON detection is ready for output
+    Given a CoT XML detection is ready for output
     And TAK Server is temporarily unavailable (connection refused)
-    When the system attempts to output to TAK subscription
+    When the system attempts HTTP PUT /CoT to TAK
     Then the push fails (connection refused error)
-    And the system writes to local SQLite queue
+    And the system writes CoT XML to local SQLite queue
     And detection is marked PENDING_SYNC
-    And status dashboard shows "TAK: OFFLINE (1 detection queued)"
+    And status dashboard shows "TAK: OFFLINE (1 CoT queued)"
     And operator is NOT notified (transparent operation)
     And system continues accepting new detections (no blocking)
     When TAK Server comes back online (30 seconds later)
     Then system detects connectivity restored
-    And automatically begins syncing queued detection
-    And detection syncs within 2 seconds of reconnection
+    And automatically begins syncing queued CoT detection
+    And CoT detection syncs within 2 seconds of reconnection
     And status dashboard updates: "TAK: SYNCING (1/1 complete)"
     And detection now appears on map (may be 30 seconds late)
     And sync_status changes from PENDING_SYNC to SYNCED
@@ -69,8 +75,8 @@ Feature: Output to TAK GeoJSON
   @error_handling @resilience
   Scenario: Multiple detections queue and batch sync efficiently
     Given TAK Server is offline
-    And 5 GeoJSON detections arrive while offline
-    When each detection cannot reach TAK
+    And 5 CoT XML detections arrive while offline
+    When each detection cannot reach TAK via PUT /CoT
     Then each is queued to local SQLite:
       | detection | status        | queued_at |
       | 1         | PENDING_SYNC  | 14:35:44  |
@@ -81,33 +87,33 @@ Feature: Output to TAK GeoJSON
     And status dashboard shows "TAK: OFFLINE (5 pending)"
     When TAK Server comes back online
     Then system detects connectivity restored
-    And begins batch sync of all 5 detections
+    And begins batch sync of all 5 CoT detections
     And syncing completes in <2 seconds (batch processing)
-    And all 5 appear on map in correct order
+    And all 5 appear on map with correct symbology
     And status dashboard: "TAK: SYNCED (5 items recovered)"
 
   @error_handling @timeout
-  Scenario: Timeout to TAK Server is handled gracefully
-    Given TAK Server is responding slowly (5+ seconds)
+  Scenario: HTTP timeout to TAK Server is handled gracefully
+    Given TAK Server is responding slowly (>5 seconds)
     And HTTP timeout is set to 5 seconds
-    When the system outputs a detection with timeout
+    When the system attempts HTTP PUT /CoT with timeout
     Then the request times out after 5 seconds
     And timeout error is caught
-    And detection is queued locally (marked PENDING_SYNC)
-    And system logs error E005 (TAK_SERVER_DOWN)
+    And CoT detection is queued locally (marked PENDING_SYNC)
+    And system logs error with timestamp
     And status dashboard: "TAK: TIMEOUT (1 pending)"
     And no detections are lost
 
-  @error_handling @auth
-  Scenario: Authentication failure is detected and logged
-    Given TAK Server authentication is misconfigured (wrong API key)
-    When system attempts to output detection
-    Then TAK Server returns HTTP 401 (Unauthorized)
-    And system logs error E005 (TAK_AUTH_FAILED)
-    And detection is queued locally
-    And status dashboard: "TAK: AUTH FAILURE - check credentials"
-    And operator intervention required (manual credential update)
-    And audit trail shows auth failure with timestamp
+  @error_handling @availability
+  Scenario: TAK Server unavailable is handled with queue fallback
+    Given TAK Server is completely unavailable (not responding)
+    When system attempts HTTP PUT /CoT to TAK
+    Then connection fails immediately (connection refused)
+    And CoT XML is queued locally
+    And detection stored with PENDING_SYNC status
+    And operator receives no error (transparent fallback)
+    And audit trail logs TAK unavailability
+    And system continues normal operation
 
   @performance @sla
   Scenario: High-volume detection stream is handled without degradation

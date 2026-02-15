@@ -1,6 +1,6 @@
-# ADR-004: GeoJSON RFC 7946 Standard Format
+# ADR-004: GeoJSON RFC 7946 Standard Format [DEPRECATED]
 
-**Status**: Accepted
+**Status**: Superseded by ADR-005 (Cursor on Target XML Format)
 
 **Date**: 2026-02-17
 
