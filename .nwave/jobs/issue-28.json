@@ -1,6 +1,7 @@
 {
   "issue_number": 28,
-  "agent": "nw:deliver",
-  "status": "processing",
-  "created_at": "2026-02-15T18:38:37Z"
+  "skill": "nw:deliver",
+  "agent_name": "jordan-lee-crafter",
+  "status": "pending",
+  "created_at": "2026-02-15T18:40:00Z"
 }
