@@ -1,0 +1,374 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: registry.internal
+  IMAGE_NAME: detection-api
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # STAGE 1: Commit Quality Gates
+  lint-and-test:
+    name: Lint, Type Check & Unit Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    outputs:
+      test-results: ${{ steps.test.outputs.result }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install flake8 black isort mypy pytest pytest-cov bandit safety
+
+      - name: Lint with flake8
+        run: |
+          flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=127
+
+      - name: Format check with black
+        run: black --check src/ tests/
+
+      - name: Import sort check with isort
+        run: isort --check-only src/ tests/
+
+      - name: Type check with mypy
+        run: mypy src/ --strict
+
+      - name: Run unit tests
+        id: test
+        run: |
+          pytest tests/unit/ \
+            --cov=src \
+            --cov-report=term \
+            --cov-report=xml \
+            --cov-report=html \
+            --junitxml=test-results.xml
+          echo "result=passed" >> $GITHUB_OUTPUT
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          flags: unittests
+
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: test-results.xml
+
+      - name: SAST with bandit
+        run: bandit -r src/ --format json --output bandit-report.json
+        continue-on-error: true
+
+      - name: Dependency scan with safety
+        run: safety check --json > safety-report.json
+        continue-on-error: true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            safety-report.json
+
+  # STAGE 2: Build Docker Image
+  build-image:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: false
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          load: true
+          build-args: |
+            VERSION=${{ github.sha }}
+
+      - name: Scan image with trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload trivy results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Push image to registry
+        if: github.event_name == 'push'
+        run: |
+          echo ${{ secrets.REGISTRY_PASSWORD }} | docker login -u ${{ secrets.REGISTRY_USERNAME }} --password-stdin ${{ env.REGISTRY }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+  # STAGE 3: Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-image
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Deploy to staging green
+        run: |
+          kubectl set image deployment/detection-api-green \
+            detection-api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            -n staging
+          kubectl rollout status deployment/detection-api-green -n staging --timeout=5m
+
+  # STAGE 4: Integration Tests
+  integration-tests:
+    name: Integration & E2E Tests
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-benchmark httpx
+
+      - name: Run integration tests
+        run: pytest tests/integration/ -v --junitxml=integration-results.xml
+
+      - name: Run E2E tests
+        run: pytest tests/e2e/ -v --junitxml=e2e-results.xml
+
+      - name: Performance benchmark
+        run: |
+          pytest tests/performance/ -v --benchmark-json=benchmark.json
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: benchmark-results
+          path: benchmark.json
+
+  # STAGE 5: Deploy to Production (Green)
+  deploy-production:
+    name: Deploy to Production Green
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Deploy to production green
+        run: |
+          kubectl set image deployment/detection-api-green \
+            detection-api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            -n default
+          kubectl rollout status deployment/detection-api-green -n default --timeout=5m
+
+  # STAGE 6: Production Validation & Traffic Switch
+  production-validation:
+    name: Production Validation & Traffic Switch
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Wait for green readiness
+        run: |
+          kubectl wait --for=condition=ready pod \
+            -l app=detection-api,slot=green -n default --timeout=60s
+
+      - name: Install dependencies for smoke tests
+        run: |
+          pip install pytest httpx
+
+      - name: Smoke tests on green
+        run: |
+          python -m pytest tests/smoke/ -v
+
+      - name: Switch traffic to green
+        run: |
+          kubectl patch service detection-api-service \
+            -p '{"spec":{"selector":{"slot":"green"}}}' \
+            -n default
+          echo "Traffic switched to green at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+      - name: Monitor production (5 minutes)
+        run: |
+          bash scripts/monitor-production.sh 300
+        timeout-minutes: 10
+
+      - name: Decommission blue (on success)
+        if: success()
+        run: |
+          kubectl delete pods \
+            -l app=detection-api,slot=blue \
+            -n default
+          echo "Blue environment decommissioned"
+
+      - name: Rollback (on failure)
+        if: failure()
+        run: |
+          # Switch traffic back to blue
+          kubectl patch service detection-api-service \
+            -p '{"spec":{"selector":{"slot":"blue"}}}' \
+            -n default
+          echo "Automatic rollback executed - traffic restored to blue"
+          exit 1
+
+  # Notify on Success
+  notify-success:
+    name: Notify Deployment Success
+    runs-on: ubuntu-latest
+    needs: production-validation
+    if: success() && github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare notification message
+        run: |
+          cat > deployment-summary.txt <<EOF
+          Deployment Success
+
+          Commit: ${{ github.sha }}
+          Author: ${{ github.actor }}
+          Branch: ${{ github.ref }}
+
+          Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          Deployment Time: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+
+          All stages passed:
+          ✓ Lint & Type Checking
+          ✓ Unit Tests
+          ✓ Docker Build & Scan
+          ✓ Staging Deployment
+          ✓ Integration Tests
+          ✓ Production Deployment
+          ✓ Production Validation (5 min monitoring)
+          ✓ Traffic Switch Complete
+          ✓ Blue Decommissioned
+          EOF
+
+      - name: Slack notification
+        if: always()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "Deployment Success: Detection API v${{ github.sha }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Deployment Success* :rocket:\n\nImage: `${{ env.IMAGE_NAME }}:${{ github.sha }}`\nBranch: `${{ github.ref }}`\nAuthor: ${{ github.actor }}"
+                  }
+                }
+              ]
+            }
+
+  # Notify on Failure
+  notify-failure:
+    name: Notify Deployment Failure
+    runs-on: ubuntu-latest
+    if: failure() && github.event_name == 'push'
+    needs: [lint-and-test, build-image, deploy-staging, integration-tests, deploy-production, production-validation]
+    steps:
+      - name: Slack notification
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "Deployment Failed: Detection API",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Deployment Failed* :x:\n\nCommit: `${{ github.sha }}`\nAuthor: ${{ github.actor }}\n\nCheck logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  }
+                }
+              ]
+            }

@@ -1,0 +1,212 @@
+# Helm Chart Values for Detection API
+# File: kubernetes/helm-charts/values.yaml
+# Purpose: Configure Kubernetes deployment for AI Detection to COP system
+
+# Application Configuration
+app:
+  name: detection-api
+  version: 1.0.0
+  replicaCount: 3
+
+# Docker Image Configuration
+image:
+  registry: registry.internal
+  repository: detection-api
+  pullPolicy: IfNotPresent
+  tag: "v1.0.0"  # Override with git SHA for CD
+
+# Container Port
+port: 8000
+
+# Resource Requests & Limits
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+# Environment Configuration
+env:
+  ENVIRONMENT: production
+  LOG_LEVEL: INFO
+  TAK_SERVER_ENDPOINT: https://tak-server.internal:8089
+  GEOLOCATION_ACCURACY_THRESHOLD_GREEN: "25"  # meters
+  GEOLOCATION_ACCURACY_THRESHOLD_YELLOW: "100"  # meters
+  OFFLINE_QUEUE_MAX_SIZE: "100000"
+  OFFLINE_QUEUE_BATCH_SIZE: "1000"
+  OFFLINE_SYNC_INTERVAL: "60"  # seconds
+
+# Secrets Management
+secrets:
+  tak_server_password:
+    name: tak-server-credentials
+    key: password
+  tak_server_username:
+    name: tak-server-credentials
+    key: username
+
+# Persistence Configuration
+persistence:
+  enabled: true
+  storageClass: fast-ssd
+  size: 50Gi
+  mountPath: /app/data
+
+# Pod Configuration
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+
+# Pod Security
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false  # Required for SQLite writes
+
+# Liveness & Readiness Probes
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 1
+
+# Node Affinity
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app
+              operator: In
+              values:
+                - detection-api
+        topologyKey: kubernetes.io/hostname
+
+# Service Configuration
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+
+# Ingress Configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: detection-api.internal.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: api-tls
+      hosts:
+        - detection-api.internal.example.com
+
+# Horizontal Pod Autoscaler (Phase 2)
+autoscaling:
+  enabled: false  # Disabled for MVP
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 75
+
+# Prometheus Monitoring
+monitoring:
+  enabled: true
+  scrapeInterval: 15s
+  evaluationInterval: 30s
+
+# ConfigMap Data
+configMap:
+  detection-thresholds: |
+    {
+      "accuracy_green_threshold_meters": 25,
+      "accuracy_yellow_threshold_meters": 100,
+      "accuracy_red_threshold_meters": 500,
+      "confidence_min_score": 0.5
+    }
+
+# Resource Quotas (per namespace)
+resourceQuota:
+  enabled: true
+  requests:
+    cpu: "50"
+    memory: "128Gi"
+  limits:
+    cpu: "100"
+    memory: "256Gi"
+  pods: "100"
+
+# Network Policies
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: TCP
+          port: 53
+
+# Blue-Green Deployment
+blueGreen:
+  enabled: true
+  activeSlot: green  # blue | green
+  strategyType: Recreate
+
+# Logging Configuration
+logging:
+  level: INFO
+  format: json
+  outputs:
+    - stdout
+    - file:/app/logs/detection-api.log
+
+# Backup Configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention: 30  # days
