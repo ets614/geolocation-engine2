@@ -24,14 +24,14 @@ class DetectionService:
             reference_elevation=reference_elevation
         )
 
-    def accept_detection(self, detection: DetectionInput) -> str:
+    def accept_detection(self, detection: DetectionInput) -> dict:
         """Accept, geolocate, and store a detection in the database.
 
         Args:
             detection: Valid detection payload with image and pixel coordinates
 
         Returns:
-            str: UUID of stored detection
+            dict: Contains detection_id and geolocation result
 
         Raises:
             ValueError: If detection cannot be processed or stored
@@ -99,7 +99,10 @@ class DetectionService:
             self.session.commit()
             self.session.refresh(db_detection)
 
-            return detection_id
+            return {
+                "detection_id": detection_id,
+                "geolocation": geo_result,
+            }
 
         except Exception as e:
             self.session.rollback()

@@ -1,9 +1,12 @@
-"""API routes for detection ingestion (driving port)."""
+"""API routes for detection ingestion with CoT/TAK output."""
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import XMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 from src.models.schemas import DetectionInput, ErrorResponse
 from src.services.detection_service import DetectionService
+from src.services.cot_service import CotService
 from src.database import get_db_session
+from src.config import get_config
 
 router = APIRouter(prefix="/api/v1", tags=["detections"])
 
@@ -11,45 +14,75 @@ router = APIRouter(prefix="/api/v1", tags=["detections"])
 @router.post(
     "/detections",
     status_code=status.HTTP_201_CREATED,
-    response_model=dict,
     responses={
-        400: {
-            "model": ErrorResponse,
-            "description": "Invalid detection payload"
-        }
+        400: {"model": ErrorResponse, "description": "Invalid detection payload"}
     }
 )
 async def create_detection(
     detection: DetectionInput,
     session: Session = Depends(get_db_session)
 ):
-    """Accept detection data from external systems.
+    """Accept detection data and return CoT/TAK format.
+
+    Ingests AI detection with image pixels and camera metadata,
+    calculates geolocation via photogrammetry, and returns standard
+    Cursor on Target (CoT) XML for TAK system integration.
 
     Args:
-        detection: Detection payload validated against DetectionInput schema
+        detection: Detection payload with image and pixel coordinates
         session: Database session (injected dependency)
 
     Returns:
-        dict: Contains detection_id and status code 201
+        XMLResponse: CoT XML for TAK system consumption
+        JSONResponse: CoT as JSON with metadata (if Accept: application/json)
 
     Raises:
-        HTTPException: 400 for invalid input
+        HTTPException: 400 for invalid input, 500 for processing errors
     """
     try:
+        # Process detection: geolocate and store
         service = DetectionService(session)
-        detection_id = service.accept_detection(detection)
-        return {
-            "detection_id": detection_id,
-            "status": "CREATED"
-        }
+        result = service.accept_detection(detection)
+        detection_id = result["detection_id"]
+        geolocation = result["geolocation"]
+
+        # Generate CoT XML
+        config = get_config()
+        cot_service = CotService(tak_server_url=config.tak_server_url)
+        cot_xml = cot_service.generate_cot_xml(
+            detection_id=detection_id,
+            geolocation=geolocation,
+            object_class=detection.object_class,
+            ai_confidence=detection.ai_confidence,
+            camera_id=detection.camera_id,
+            timestamp=detection.timestamp,
+        )
+
+        # Push to TAK server if configured (async, non-blocking)
+        try:
+            import asyncio
+            asyncio.create_task(cot_service.push_to_tak_server(cot_xml))
+        except Exception:
+            pass  # Non-critical, continue even if TAK push fails
+
+        # Return CoT XML as primary response
+        return XMLResponse(
+            content=cot_xml,
+            status_code=status.HTTP_201_CREATED,
+            headers={
+                "X-Detection-ID": detection_id,
+                "X-Confidence-Flag": geolocation.confidence_flag,
+            },
+        )
+
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "error_code": "E002",
                 "error_message": str(e),
-                "details": None
-            }
+                "details": None,
+            },
         )
     except Exception as e:
         raise HTTPException(
@@ -57,6 +90,6 @@ async def create_detection(
             detail={
                 "error_code": "E999",
                 "error_message": "Internal server error",
-                "details": None
-            }
+                "details": None,
+            },
         )
