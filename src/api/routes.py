@@ -1,6 +1,6 @@
 """API routes for detection ingestion with CoT/TAK output."""
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import XMLResponse, JSONResponse
+from fastapi.responses import Response, JSONResponse
 from sqlalchemy.orm import Session
 from src.models.schemas import DetectionInput, ErrorResponse
 from src.services.detection_service import DetectionService
@@ -66,9 +66,10 @@ async def create_detection(
             pass  # Non-critical, continue even if TAK push fails
 
         # Return CoT XML as primary response
-        return XMLResponse(
+        return Response(
             content=cot_xml,
             status_code=status.HTTP_201_CREATED,
+            media_type="application/xml",
             headers={
                 "X-Detection-ID": detection_id,
                 "X-Confidence-Flag": geolocation.confidence_flag,
