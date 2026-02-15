@@ -13,50 +13,84 @@ jobs:
     steps:
       - name: Discord notification - Issue opened
         if: github.event_name == 'issues' && github.event.action == 'opened'
-        uses: tsickert/discord-webhook@v1
-        with:
-          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          embed-title: "📋 New Issue Created"
-          embed-description: "${{ github.event.issue.title }}"
-          embed-url: "${{ github.event.issue.html_url }}"
-          embed-color: 3447003
+        run: |
+          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "embeds": [{
+                "title": "📋 New Issue Created",
+                "description": "${{ github.event.issue.title }}",
+                "url": "${{ github.event.issue.html_url }}",
+                "color": 3447003,
+                "fields": [
+                  {"name": "Issue #", "value": "${{ github.event.issue.number }}", "inline": true},
+                  {"name": "Author", "value": "${{ github.event.issue.user.login }}", "inline": true}
+                ]
+              }]
+            }'
 
       - name: Discord notification - Issue labeled
         if: github.event_name == 'issues' && github.event.action == 'labeled'
-        uses: tsickert/discord-webhook@v1
-        with:
-          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          embed-title: "🏷️ Issue Labeled"
-          embed-description: "${{ github.event.issue.title }}"
-          embed-url: "${{ github.event.issue.html_url }}"
-          embed-color: 15158332
+        run: |
+          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "embeds": [{
+                "title": "🏷️ Issue Labeled",
+                "description": "${{ github.event.issue.title }}",
+                "url": "${{ github.event.issue.html_url }}",
+                "color": 15158332,
+                "fields": [
+                  {"name": "Issue #", "value": "${{ github.event.issue.number }}", "inline": true}
+                ]
+              }]
+            }'
 
       - name: Discord notification - Issue closed
         if: github.event_name == 'issues' && github.event.action == 'closed'
-        uses: tsickert/discord-webhook@v1
-        with:
-          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          embed-title: "✅ Issue Closed"
-          embed-description: "${{ github.event.issue.title }}"
-          embed-url: "${{ github.event.issue.html_url }}"
-          embed-color: 3066993
+        run: |
+          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "embeds": [{
+                "title": "✅ Issue Closed",
+                "description": "${{ github.event.issue.title }}",
+                "url": "${{ github.event.issue.html_url }}",
+                "color": 3066993
+              }]
+            }'
 
       - name: Discord notification - PR opened
         if: github.event_name == 'pull_request' && github.event.action == 'opened'
-        uses: tsickert/discord-webhook@v1
-        with:
-          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          embed-title: "🚀 Pull Request Opened"
-          embed-description: "${{ github.event.pull_request.title }}"
-          embed-url: "${{ github.event.pull_request.html_url }}"
-          embed-color: 9437184
+        run: |
+          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "embeds": [{
+                "title": "🚀 Pull Request Opened",
+                "description": "${{ github.event.pull_request.title }}",
+                "url": "${{ github.event.pull_request.html_url }}",
+                "color": 9437184,
+                "fields": [
+                  {"name": "PR #", "value": "${{ github.event.pull_request.number }}", "inline": true},
+                  {"name": "Author", "value": "${{ github.event.pull_request.user.login }}", "inline": true}
+                ]
+              }]
+            }'
 
       - name: Discord notification - PR ready for review
         if: github.event_name == 'pull_request' && github.event.action == 'ready_for_review'
-        uses: tsickert/discord-webhook@v1
-        with:
-          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          embed-title: "👀 PR Ready for Review"
-          embed-description: "${{ github.event.pull_request.title }}"
-          embed-url: "${{ github.event.pull_request.html_url }}"
-          embed-color: 16776960
+        run: |
+          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "embeds": [{
+                "title": "👀 PR Ready for Review",
+                "description": "${{ github.event.pull_request.title }}",
+                "url": "${{ github.event.pull_request.html_url }}",
+                "color": 16776960,
+                "fields": [
+                  {"name": "PR #", "value": "${{ github.event.pull_request.number }}", "inline": true}
+                ]
+              }]
+            }'
