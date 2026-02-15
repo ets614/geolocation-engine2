@@ -93,3 +93,22 @@ class AuditTrail(Base):
     status = Column(String(50), nullable=False)
 
     __table_args__ = (Index("idx_audit_timestamp", "timestamp"),)
+
+
+class AuditEvent(Base):
+    """Immutable audit trail events for compliance and debugging."""
+
+    __tablename__ = "audit_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    detection_id = Column(String(36), nullable=False)
+    event_type = Column(String(50), nullable=False)  # detection_received, geolocation_calculated, etc.
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    details = Column(String, nullable=False)  # JSON as text for immutability
+    severity = Column(String(10), nullable=False, default="INFO")  # INFO, WARNING, ERROR
+
+    __table_args__ = (
+        Index("idx_audit_detection_id", "detection_id"),
+        Index("idx_audit_event_timestamp", "timestamp"),
+        Index("idx_audit_event_type", "event_type"),
+    )
