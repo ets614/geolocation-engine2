@@ -1,0 +1,299 @@
+# Prometheus Alert Rules for Detection API
+# Derived from SLO targets: 99.9% availability, P95 < 300ms, error rate < 0.1%
+
+groups:
+  # -------------------------------------------------------------------
+  # SLO-Based Alerts (derived from service level objectives)
+  # -------------------------------------------------------------------
+  - name: detection_api_slo
+    interval: 30s
+    rules:
+      # Error rate SLO: < 0.1% over 5 minutes
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.001
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Error rate exceeds 0.1% SLO"
+          description: >-
+            Detection API error rate is {{ $value | humanizePercentage }}
+            over the last 5 minutes. SLO target: < 0.1%.
+          runbook_url: "https://wiki.internal/runbooks/detection-api-error-rate"
+
+      # Latency SLO: P95 < 300ms
+      - alert: HighP95Latency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+          > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "P95 latency exceeds 300ms SLO"
+          description: >-
+            Detection API P95 latency is {{ $value | humanizeDuration }}.
+            SLO target: < 300ms.
+
+      # Latency SLO: P99 < 500ms
+      - alert: HighP99Latency
+        expr: |
+          histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+          > 0.5
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "P99 latency exceeds 500ms SLO"
+          description: >-
+            Detection API P99 latency is {{ $value | humanizeDuration }}.
+            SLO target: < 500ms.
+
+  # -------------------------------------------------------------------
+  # Availability Alerts
+  # -------------------------------------------------------------------
+  - name: detection_api_availability
+    interval: 30s
+    rules:
+      - alert: ServiceDown
+        expr: up{job="detection-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Detection API instance is down"
+          description: "Instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: TooFewInstances
+        expr: count(up{job="detection-api"} == 1) < 2
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Fewer than 2 healthy Detection API instances"
+          description: >-
+            Only {{ $value }} instance(s) running.
+            Minimum 2 required for high availability.
+
+      - alert: NoRequestsReceived
+        expr: |
+          sum(rate(http_requests_total{job="detection-api"}[10m])) == 0
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Detection API receiving zero requests"
+          description: "No HTTP requests in the last 10 minutes -- possible routing or upstream issue."
+
+  # -------------------------------------------------------------------
+  # Authentication Alerts
+  # -------------------------------------------------------------------
+  - name: detection_api_auth
+    interval: 30s
+    rules:
+      - alert: HighAuthFailureRate
+        expr: |
+          (
+            sum(rate(auth_attempts_total{result="failure"}[5m]))
+            /
+            sum(rate(auth_attempts_total[5m]))
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "Authentication failure rate > 20%"
+          description: >-
+            {{ $value | humanizePercentage }} of auth attempts are failing.
+            Possible credential stuffing or misconfigured client.
+
+      - alert: AuthBruteForceDetected
+        expr: |
+          sum(rate(auth_attempts_total{result="failure"}[1m])) > 10
+        for: 2m
+        labels:
+          severity: critical
+          team: security
+        annotations:
+          summary: "Possible brute force attack detected"
+          description: >-
+            More than 10 authentication failures per minute sustained
+            for 2 minutes.
+
+  # -------------------------------------------------------------------
+  # Detection Processing Alerts
+  # -------------------------------------------------------------------
+  - name: detection_api_processing
+    interval: 30s
+    rules:
+      - alert: DetectionProcessingErrors
+        expr: |
+          (
+            sum(rate(detections_processed_total{status="error"}[5m]))
+            /
+            sum(rate(detections_processed_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Detection processing error rate > 5%"
+          description: >-
+            {{ $value | humanizePercentage }} of detections are failing
+            processing in the last 5 minutes.
+
+      - alert: SlowDetectionProcessing
+        expr: |
+          histogram_quantile(0.95, sum(rate(detection_processing_duration_seconds_bucket[5m])) by (le))
+          > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "P95 detection processing time > 1 second"
+          description: >-
+            Detection processing P95 is {{ $value | humanizeDuration }}.
+
+      - alert: LowGeolocationConfidence
+        expr: |
+          (
+            sum(rate(detections_processed_total{confidence_flag="RED"}[15m]))
+            /
+            sum(rate(detections_processed_total[15m]))
+          ) > 0.3
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "More than 30% of detections have RED confidence"
+          description: "High proportion of low-confidence geolocations may indicate sensor calibration issues."
+
+  # -------------------------------------------------------------------
+  # TAK Server Alerts
+  # -------------------------------------------------------------------
+  - name: detection_api_tak
+    interval: 30s
+    rules:
+      - alert: TAKPushFailures
+        expr: |
+          (
+            sum(rate(tak_push_total{status="failure"}[5m]))
+            /
+            sum(rate(tak_push_total[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "TAK server push failure rate > 10%"
+          description: "TAK server may be unreachable. Queue is handling failed pushes."
+
+      - alert: TAKPushLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(tak_push_duration_seconds_bucket[5m])) by (le))
+          > 5.0
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "TAK push P95 latency > 5 seconds"
+          description: "TAK server push operations are degraded."
+
+  # -------------------------------------------------------------------
+  # Offline Queue Alerts
+  # -------------------------------------------------------------------
+  - name: detection_api_queue
+    interval: 30s
+    rules:
+      - alert: OfflineQueueGrowing
+        expr: offline_queue_size > 1000
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Offline queue has more than 1000 items"
+          description: >-
+            Queue size: {{ $value }}. TAK server may be unreachable
+            and items are accumulating.
+
+      - alert: OfflineQueueCritical
+        expr: offline_queue_size > 50000
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Offline queue approaching capacity (50K+ items)"
+          description: >-
+            Queue size: {{ $value }}. Max capacity: 100,000.
+            Immediate attention needed.
+
+      - alert: OfflineQueueStale
+        expr: offline_queue_oldest_item_age_seconds > 3600
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Oldest queued item is over 1 hour old"
+          description: "Items not draining. TAK connectivity or sync process may be stuck."
+
+  # -------------------------------------------------------------------
+  # Cache Alerts
+  # -------------------------------------------------------------------
+  - name: detection_api_cache
+    interval: 60s
+    rules:
+      - alert: LowCacheHitRate
+        expr: |
+          (
+            sum(rate(cache_hits_total[10m]))
+            /
+            (sum(rate(cache_hits_total[10m])) + sum(rate(cache_misses_total[10m])))
+          ) < 0.5
+        for: 15m
+        labels:
+          severity: info
+          team: platform
+        annotations:
+          summary: "Cache hit rate below 50%"
+          description: >-
+            Cache hit rate is {{ $value | humanizePercentage }}.
+            Consider cache warming or TTL adjustment.
+
+  # -------------------------------------------------------------------
+  # Rate Limiting Alerts
+  # -------------------------------------------------------------------
+  - name: detection_api_rate_limiting
+    interval: 30s
+    rules:
+      - alert: HighRateLimitRejections
+        expr: |
+          sum(rate(rate_limit_hits_total[5m])) > 50
+        for: 5m
+        labels:
+          severity: info
+          team: platform
+        annotations:
+          summary: "High rate limit rejection volume"
+          description: >-
+            {{ $value }} rate limit rejections per second.
+            Review client load patterns.

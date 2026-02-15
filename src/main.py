@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from src.config import get_config
 from src.middleware import setup_middleware
 from src.api.routes import router as detection_router
+from src.metrics import setup_metrics
 
 # Create FastAPI app
 config = get_config()
@@ -12,6 +13,9 @@ app = FastAPI(
     version=config.app_version,
     description="Service for detection to COP integration",
 )
+
+# Setup Prometheus metrics (must be before other middleware)
+setup_metrics(app, version=config.app_version)
 
 # Setup middleware
 setup_middleware(app, config)

@@ -1,0 +1,204 @@
+name: Load Test
+
+on:
+  # Manual trigger for ad-hoc load tests
+  workflow_dispatch:
+    inputs:
+      target_host:
+        description: "Target host URL"
+        required: true
+        default: "http://localhost:8000"
+      users:
+        description: "Number of concurrent users"
+        required: true
+        default: "100"
+      spawn_rate:
+        description: "User spawn rate per second"
+        required: true
+        default: "10"
+      duration:
+        description: "Test duration (e.g. 5m, 10m)"
+        required: true
+        default: "5m"
+
+  # Run on PRs that modify performance-sensitive code
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/load/**"
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  load-test:
+    name: Locust Load Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-load-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-load-
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install locust prometheus_client
+
+      - name: Start Detection API in background
+        run: |
+          uvicorn src.main:app --host 0.0.0.0 --port 8000 &
+          sleep 3
+          curl -sf http://localhost:8000/api/v1/health || exit 1
+        env:
+          JWT_SECRET_KEY: test-secret-for-load-testing
+          DATABASE_URL: sqlite:///./test_load.db
+
+      - name: Run load test
+        run: |
+          mkdir -p results
+          locust \
+            -f tests/load/locustfile.py \
+            --host http://localhost:8000 \
+            --headless \
+            -u ${{ github.event.inputs.users || '100' }} \
+            -r ${{ github.event.inputs.spawn_rate || '10' }} \
+            --run-time ${{ github.event.inputs.duration || '2m' }} \
+            --csv results/load_test \
+            --html results/load_test_report.html \
+            --print-stats \
+            --only-summary 2>&1 | tee results/console_output.txt
+
+      - name: Check SLO compliance
+        run: |
+          echo "Checking SLO compliance from test output..."
+          if grep -q "SLO STATUS: ALL TARGETS MET" results/console_output.txt; then
+            echo "All SLO targets met."
+          elif grep -q "SLO STATUS: VIOLATED" results/console_output.txt; then
+            echo "WARNING: SLO violations detected -- review results."
+            # Do not fail the workflow; report only
+          fi
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: load-test-results
+          path: |
+            results/load_test_report.html
+            results/load_test_stats.csv
+            results/load_test_failures.csv
+            results/console_output.txt
+          retention-days: 30
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            let output = '';
+            try {
+              output = fs.readFileSync('results/console_output.txt', 'utf8');
+            } catch (e) {
+              output = 'Load test output not available.';
+            }
+
+            // Extract SLO section
+            const sloMatch = output.match(/SLO COMPLIANCE REPORT[\s\S]*?={10,}/g);
+            const sloReport = sloMatch ? sloMatch[0] : 'SLO report not found.';
+
+            const body = `## Load Test Results\n\n\`\`\`\n${sloReport}\n\`\`\`\n\nFull report available in workflow artifacts.`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety pip-audit semgrep
+
+      - name: SAST with Bandit
+        run: |
+          bandit -r src/ -f json -o bandit-results.json || true
+          bandit -r src/ -f txt || true
+
+      - name: Dependency audit with pip-audit
+        run: |
+          pip-audit --format json --output pip-audit-results.json || true
+          pip-audit || true
+
+      - name: Semgrep SAST scan
+        run: |
+          semgrep --config=auto --json --output semgrep-results.json src/ || true
+          semgrep --config=auto src/ || true
+
+      - name: Secret detection
+        run: |
+          pip install detect-secrets
+          detect-secrets scan --all-files --exclude-files '\.git/.*' > secrets-baseline.json || true
+          python -c "
+          import json
+          with open('secrets-baseline.json') as f:
+              data = json.load(f)
+          results = data.get('results', {})
+          total = sum(len(v) for v in results.values())
+          if total > 0:
+              print(f'WARNING: {total} potential secrets detected')
+              for file, items in results.items():
+                  for item in items:
+                      print(f'  {file}:{item.get(\"line_number\", \"?\")}: {item.get(\"type\", \"unknown\")}')
+          else:
+              print('No secrets detected.')
+          "
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-scan-results
+          path: |
+            bandit-results.json
+            pip-audit-results.json
+            semgrep-results.json
+            secrets-baseline.json
+          retention-days: 90
