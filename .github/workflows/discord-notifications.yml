@@ -10,11 +10,13 @@ jobs:
   notify-discord:
     name: Send Discord Notification
     runs-on: ubuntu-latest
+    env:
+      WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
     steps:
       - name: Discord notification - Issue opened
-        if: github.event_name == 'issues' && github.event.action == 'opened'
+        if: github.event_name == 'issues' && github.event.action == 'opened' && env.WEBHOOK_URL != ''
         run: |
-          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+          curl -X POST "$WEBHOOK_URL" \
             -H 'Content-Type: application/json' \
             -d '{
               "embeds": [{
@@ -30,9 +32,9 @@ jobs:
             }'
 
       - name: Discord notification - Issue labeled
-        if: github.event_name == 'issues' && github.event.action == 'labeled'
+        if: github.event_name == 'issues' && github.event.action == 'labeled' && env.WEBHOOK_URL != ''
         run: |
-          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+          curl -X POST "$WEBHOOK_URL" \
             -H 'Content-Type: application/json' \
             -d '{
               "embeds": [{
@@ -47,9 +49,9 @@ jobs:
             }'
 
       - name: Discord notification - Issue closed
-        if: github.event_name == 'issues' && github.event.action == 'closed'
+        if: github.event_name == 'issues' && github.event.action == 'closed' && env.WEBHOOK_URL != ''
         run: |
-          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+          curl -X POST "$WEBHOOK_URL" \
             -H 'Content-Type: application/json' \
             -d '{
               "embeds": [{
@@ -61,9 +63,9 @@ jobs:
             }'
 
       - name: Discord notification - PR opened
-        if: github.event_name == 'pull_request' && github.event.action == 'opened'
+        if: github.event_name == 'pull_request' && github.event.action == 'opened' && env.WEBHOOK_URL != ''
         run: |
-          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+          curl -X POST "$WEBHOOK_URL" \
             -H 'Content-Type: application/json' \
             -d '{
               "embeds": [{
@@ -79,9 +81,9 @@ jobs:
             }'
 
       - name: Discord notification - PR ready for review
-        if: github.event_name == 'pull_request' && github.event.action == 'ready_for_review'
+        if: github.event_name == 'pull_request' && github.event.action == 'ready_for_review' && env.WEBHOOK_URL != ''
         run: |
-          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+          curl -X POST "$WEBHOOK_URL" \
             -H 'Content-Type: application/json' \
             -d '{
               "embeds": [{
