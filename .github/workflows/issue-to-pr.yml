@@ -113,7 +113,10 @@ jobs:
           git config user.email "claude@anthropic.com"
           git add .nwave/jobs/issue-*.json
           git commit -m "chore: Create job marker for issue #${{ steps.issue.outputs.number }}" || echo "No changes to commit"
-          git push
+          # Handle concurrent workflow pushes by rebasing on latest main
+          git fetch origin main
+          git rebase origin/main || git rebase --abort
+          git push origin HEAD:main || echo "Push skipped - concurrent workflow detected"
 
   notify:
     name: Notify Issue Routed
