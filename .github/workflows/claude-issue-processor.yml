@@ -1,0 +1,270 @@
+name: Claude Issue Processor
+
+# Run every 5 minutes to process pending issues
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  process-with-claude:
+    name: Process Issues with Claude API
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pyyaml
+
+      - name: Find and process pending issues
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+          import requests
+          import time
+
+          # Find pending jobs
+          job_files = list(Path('.nwave/jobs').glob('issue-*.json'))
+          pending_jobs = []
+
+          for job_file in job_files:
+            with open(job_file) as f:
+              job = json.load(f)
+              if job.get('status') == 'pending':
+                pending_jobs.append((job, job_file))
+
+          if not pending_jobs:
+            print("No pending jobs found")
+            exit(0)
+
+          print(f"Found {len(pending_jobs)} pending issues to process")
+
+          # Process each pending job
+          for job, job_file in pending_jobs:
+            issue_number = job['issue_number']
+            print(f"\n{'='*60}")
+            print(f"Processing Issue #{issue_number}")
+            print(f"{'='*60}")
+
+            # Get issue details
+            result = subprocess.run(
+              ['gh', 'issue', 'view', str(issue_number), '--json', 'title,body,labels'],
+              capture_output=True,
+              text=True,
+              cwd='/workspaces/geolocation-engine2'
+            )
+
+            if result.returncode != 0:
+              print(f"❌ Failed to get issue details: {result.stderr}")
+              continue
+
+            issue_data = json.loads(result.stdout)
+            issue_title = issue_data['title']
+            issue_body = issue_data['body'] or ''
+            labels = [label['name'] for label in issue_data.get('labels', [])]
+
+            print(f"Title: {issue_title}")
+            print(f"Body: {issue_body[:100]}...")
+            print(f"Labels: {labels}")
+
+            # Call Claude API to generate implementation
+            api_key = os.environ.get('ANTHROPIC_API_KEY')
+            if not api_key:
+              print("❌ ANTHROPIC_API_KEY not set")
+              continue
+
+            prompt = f"""You are a code generation assistant. Based on the GitHub issue below, generate the implementation.
+
+**Issue Title:** {issue_title}
+**Issue Description:** {issue_body}
+**Labels:** {', '.join(labels)}
+
+Provide ONLY the code/files that should be created or modified. Format your response as:
+FILE: path/to/file.ext
+```language
+code content here
+```
+
+Multiple files should be separated by FILE: markers. Be concise and practical."""
+
+            print("\n🤖 Calling Claude API...")
+
+            try:
+              response = requests.post(
+                'https://api.anthropic.com/v1/messages',
+                headers={
+                  'x-api-key': api_key,
+                  'anthropic-version': '2023-06-01',
+                  'content-type': 'application/json'
+                },
+                json={
+                  'model': 'claude-opus-4-6',
+                  'max_tokens': 4096,
+                  'messages': [
+                    {'role': 'user', 'content': prompt}
+                  ]
+                },
+                timeout=60
+              )
+
+              if response.status_code != 200:
+                print(f"❌ Claude API error: {response.status_code}")
+                print(f"Response: {response.text[:500]}")
+                continue
+
+              response_data = response.json()
+              generated_code = response_data['content'][0]['text']
+              print("✅ Claude generated implementation:")
+              print(generated_code[:500])
+
+            except Exception as e:
+              print(f"❌ Error calling Claude API: {e}")
+              continue
+
+            # Create feature branch
+            branch_name = f"issue-{issue_number}-auto"
+            print(f"\n📦 Creating branch: {branch_name}")
+
+            subprocess.run(
+              ['git', 'config', 'user.name', 'Claude Code Agent'],
+              cwd='/workspaces/geolocation-engine2'
+            )
+            subprocess.run(
+              ['git', 'config', 'user.email', 'claude@anthropic.com'],
+              cwd='/workspaces/geolocation-engine2'
+            )
+
+            subprocess.run(
+              ['git', 'fetch', 'origin', 'main'],
+              cwd='/workspaces/geolocation-engine2'
+            )
+            subprocess.run(
+              ['git', 'checkout', '-b', branch_name, 'origin/main'],
+              cwd='/workspaces/geolocation-engine2',
+              capture_output=True
+            )
+
+            # Parse and create files from Claude's output
+            files_created = 0
+            for file_section in generated_code.split('FILE:')[1:]:
+              lines = file_section.strip().split('\n', 1)
+              if len(lines) < 2:
+                continue
+
+              file_path = lines[0].strip()
+              file_content = lines[1]
+
+              # Extract content from code blocks
+              if '```' in file_content:
+                start = file_content.find('```') + 3
+                end = file_content.rfind('```')
+                if end > start:
+                  file_content = file_content[start:end].strip()
+                  # Remove language identifier if present
+                  if '\n' in file_content[:20]:
+                    file_content = file_content.split('\n', 1)[1]
+
+              # Create file
+              full_path = f'/workspaces/geolocation-engine2/{file_path}'
+              os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+              with open(full_path, 'w') as f:
+                f.write(file_content)
+
+              files_created += 1
+              print(f"  ✅ Created: {file_path}")
+
+            if files_created == 0:
+              print("⚠️  No files were created from Claude's response")
+              continue
+
+            # Commit changes
+            print(f"\n📝 Committing changes...")
+            subprocess.run(
+              ['git', 'add', '-A'],
+              cwd='/workspaces/geolocation-engine2'
+            )
+
+            commit_msg = f"feat: {issue_title} (Issue #{issue_number})\n\nCloses #{issue_number}"
+            subprocess.run(
+              ['git', 'commit', '-m', commit_msg],
+              cwd='/workspaces/geolocation-engine2'
+            )
+
+            # Push branch
+            print(f"🚀 Pushing branch...")
+            result = subprocess.run(
+              ['git', 'push', '-u', 'origin', branch_name],
+              cwd='/workspaces/geolocation-engine2',
+              capture_output=True,
+              text=True
+            )
+
+            if result.returncode != 0:
+              print(f"❌ Failed to push: {result.stderr}")
+              continue
+
+            # Create PR
+            print(f"🔗 Creating pull request...")
+            pr_body = f"""## Issue #{issue_number}\n\n{issue_body}\n\n---\n✨ Generated by Claude API\n\nCloses #{issue_number}"""
+
+            result = subprocess.run(
+              ['gh', 'pr', 'create',
+               '--base', 'main',
+               '--head', branch_name,
+               '--title', f"feat: {issue_title}",
+               '--body', pr_body],
+              cwd='/workspaces/geolocation-engine2',
+              capture_output=True,
+              text=True
+            )
+
+            if result.returncode != 0:
+              print(f"❌ Failed to create PR: {result.stderr}")
+              continue
+
+            pr_url = result.stdout.strip()
+            print(f"✅ PR created: {pr_url}")
+
+            # Update job status
+            job['status'] = 'completed'
+            job['pr_url'] = pr_url
+            job['completed_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+
+            with open(job_file, 'w') as f:
+              json.dump(job, f, indent=2)
+
+            # Commit job status update
+            subprocess.run(['git', 'add', str(job_file)], cwd='/workspaces/geolocation-engine2')
+            subprocess.run(
+              ['git', 'commit', '-m', f'chore: Mark issue #{issue_number} as completed'],
+              cwd='/workspaces/geolocation-engine2'
+            )
+            subprocess.run(
+              ['git', 'push', 'origin', 'main'],
+              cwd='/workspaces/geolocation-engine2'
+            )
+
+            print(f"✅ Issue #{issue_number} processed successfully!\n")
+
+        shell: python3 {0}
