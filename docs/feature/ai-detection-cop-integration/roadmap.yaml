@@ -1,0 +1,750 @@
+project_id: ai-detection-cop-integration
+schema_version: "2.0"
+created_at: "2026-02-15T10:00:00Z"
+total_effort: "8-12 weeks"
+team_size: "2-3 engineers"
+
+validation:
+  status: pending_review
+  checked_by: nw-solution-architect
+  checklist:
+    - step_ids_format_compliant: true
+    - acceptance_criteria_behavioral: true
+    - no_implementation_coupling: true
+    - dependencies_traced: true
+    - risk_levels_justified: true
+
+phases:
+  - phase_id: "01"
+    title: "Foundation & Walking Skeleton"
+    description: "Establish FastAPI service foundation with database layer, core data models, and walking skeleton capability for end-to-end detection flow"
+    duration: "2 weeks"
+
+    steps:
+      - step_id: "01-01"
+        title: "Implement FastAPI service scaffolding with health checks"
+        description: |
+          Create FastAPI application with core infrastructure: main application instance,
+          async request handling setup, CORS middleware, error handlers for HTTP 400/404/500,
+          and health check endpoint responding with service readiness status.
+        acceptance_criteria:
+          - "Service starts without errors on port 8000"
+          - "GET /api/v1/health returns 200 with JSON status object"
+          - "Health endpoint responds in <100ms"
+          - "CORS middleware accepts requests from configured origins"
+          - "HTTP error handlers return appropriate status codes (400/404/500)"
+        files_to_modify:
+          - "src/main.py"
+          - "src/config.py"
+          - "src/middleware.py"
+          - "tests/unit/test_main.py"
+          - "tests/unit/test_health_check.py"
+        effort_estimate: "1 day"
+        dependencies: []
+        risk_level: "LOW"
+        success_metrics:
+          - "Service uptime >99% in integration tests"
+          - "Unit test coverage >85% for main.py"
+          - "Health check latency <100ms (p99)"
+
+      - step_id: "01-02"
+        title: "Set up SQLite database schema and migrations"
+        description: |
+          Create database schema with tables for detections, offline queue, and audit trail.
+          Implement schema migrations using Alembic to manage schema versioning. Set up
+          connection pooling and transaction handling for async operations.
+        acceptance_criteria:
+          - "SQLite database initializes on startup without manual intervention"
+          - "Schema includes tables: detections, offline_queue, audit_trail, with proper indices"
+          - "Migrations apply successfully from empty database to current schema"
+          - "Database queries execute in <500ms for standard operations"
+          - "Connection pool maintains 5-10 active connections"
+        files_to_modify:
+          - "src/database.py"
+          - "src/models/database_models.py"
+          - "alembic/versions/*.py"
+          - "alembic/env.py"
+          - "tests/unit/test_database.py"
+          - "tests/integration/test_database_schema.py"
+        effort_estimate: "2 days"
+        dependencies: ["01-01"]
+        risk_level: "LOW"
+        success_metrics:
+          - "Migration execution time <2 seconds"
+          - "Database file created at /app/data/app.db"
+          - "All tables created with proper constraints"
+
+      - step_id: "01-03"
+        title: "Implement detection data models (Pydantic schemas)"
+        description: |
+          Create Pydantic data models for Detection, GeoJSON features, and validation
+          responses. Define field validators for coordinate ranges, confidence bounds,
+          and timestamp formats. Models enable automatic request validation and OpenAPI documentation.
+        acceptance_criteria:
+          - "Detection model validates latitude -90 to +90, longitude -180 to +180"
+          - "Confidence field accepts 0-1 scale, rejects values outside range"
+          - "Timestamp field validates ISO8601 format"
+          - "GeoJSONFeature model produces RFC 7946 compliant output"
+          - "Invalid input raises ValidationError with descriptive message"
+        files_to_modify:
+          - "src/models/detection.py"
+          - "src/models/geojson.py"
+          - "src/models/audit.py"
+          - "tests/unit/test_detection_model.py"
+          - "tests/unit/test_geojson_model.py"
+        effort_estimate: "1.5 days"
+        dependencies: ["01-01"]
+        risk_level: "LOW"
+        success_metrics:
+          - "Model validation latency <5ms per detection"
+          - "All 20+ model tests passing"
+          - "OpenAPI schema auto-generated correctly"
+
+      - step_id: "01-04"
+        title: "Implement REST API input port (/api/v1/detections)"
+        description: |
+          Create REST API endpoint accepting JSON detection payloads. Implement request
+          validation, error responses (400/422/429), and response envelope returning detection ID
+          and processing status. Set up request logging and rate limiting infrastructure.
+        acceptance_criteria:
+          - "POST /api/v1/detections accepts valid JSON detection"
+          - "Request validation catches missing required fields (latitude, longitude)"
+          - "Malformed JSON returns HTTP 400 with descriptive error"
+          - "Rate limiting returns HTTP 429 after threshold exceeded"
+          - "Successful ingestion returns HTTP 202 Accepted with detection ID"
+        files_to_modify:
+          - "src/adapters/rest_api_adapter.py"
+          - "src/routes/detections.py"
+          - "tests/integration/test_ingest_endpoint.py"
+          - "tests/unit/test_rest_validation.py"
+        effort_estimate: "1.5 days"
+        dependencies: ["01-01", "01-03"]
+        risk_level: "LOW"
+        success_metrics:
+          - "Endpoint handles 10+ requests/second"
+          - "Response time <100ms (p99)"
+          - "Rate limiting threshold configurable via environment"
+
+      - step_id: "01-05"
+        title: "Implement logging and audit trail infrastructure"
+        description: |
+          Set up structured JSON logging using Python logging module with custom formatters.
+          Implement audit trail service capturing events with detection_id, timestamp, event type,
+          and details. Create audit database adapter for persisting events to SQLite.
+        acceptance_criteria:
+          - "All events logged as JSON with timestamp, level, event type, detection_id"
+          - "Audit events include: detection_received, validated, transformed, output_success, error"
+          - "Log entries searchable by detection_id in database"
+          - "Logs include 5-10 relevant context fields per event"
+          - "Audit trail retention policy enforced (90-day minimum)"
+        files_to_modify:
+          - "src/services/audit_trail_service.py"
+          - "src/logging_config.py"
+          - "src/adapters/logging_adapter.py"
+          - "tests/unit/test_audit_trail_service.py"
+          - "tests/integration/test_audit_logging.py"
+        effort_estimate: "1.5 days"
+        dependencies: ["01-02"]
+        risk_level: "LOW"
+        success_metrics:
+          - "Audit event latency <10ms"
+          - "Structured logging format passes JSON validation"
+          - "Audit queries return results in <500ms"
+
+      - step_id: "01-06"
+        title: "Package walking skeleton as Docker image"
+        description: |
+          Create Dockerfile packaging FastAPI service, SQLite, and dependencies. Build
+          Docker image and validate runs on port 8000. Create docker-compose.yaml for
+          local development with volume mounts for database persistence.
+        acceptance_criteria:
+          - "Docker image builds without errors"
+          - "Container starts and health check succeeds"
+          - "SQLite database persists to mounted volume"
+          - "API accessible on http://localhost:8000"
+          - "Image includes only necessary dependencies (slim base image)"
+        files_to_modify:
+          - "Dockerfile"
+          - "docker-compose.yaml"
+          - ".dockerignore"
+          - "requirements.txt"
+          - "tests/integration/test_docker_image.py"
+        effort_estimate: "1 day"
+        dependencies: ["01-01", "01-02", "01-03", "01-04", "01-05"]
+        risk_level: "LOW"
+        success_metrics:
+          - "Docker image size <500MB"
+          - "Container startup time <5 seconds"
+          - "Health check responds within 2 seconds of startup"
+
+  - phase_id: "02"
+    title: "Core Features - Detection to GeoJSON"
+    description: "Implement core business logic: detection ingestion, geolocation validation (killer feature), GeoJSON transformation, TAK output, and audit trail integration"
+    duration: "3 weeks"
+
+    steps:
+      - step_id: "02-01"
+        title: "Implement DetectionIngestionService (parse JSON)"
+        description: |
+          Create service accepting raw JSON payloads, validating structure, extracting required
+          fields (latitude, longitude, confidence, type, timestamp), and preserving original
+          format for audit trail. Handle API rate limits with exponential backoff strategy.
+        acceptance_criteria:
+          - "Service parses valid JSON detection and extracts all required fields"
+          - "Malformed JSON triggers error E001 (INVALID_JSON) logged to audit trail"
+          - "Rate-limited API (HTTP 429) backs off per Retry-After header"
+          - "Original payload preserved for audit trail compliance"
+          - "Ingestion events logged with detection_id, source, timestamp"
+        files_to_modify:
+          - "src/services/detection_ingestion_service.py"
+          - "src/models/detection.py"
+          - "tests/unit/test_detection_ingestion_service.py"
+          - "tests/integration/test_ingest_scenarios.py"
+        effort_estimate: "2 days"
+        dependencies: ["01-02", "01-04", "01-05"]
+        risk_level: "LOW"
+        success_metrics:
+          - "Ingestion latency <10ms per detection (p99)"
+          - "Throughput >100 detections/second"
+          - "Error handling passes malformed JSON test scenarios"
+
+      - step_id: "02-02"
+        title: "Implement GeolocationValidationService (accuracy flagging)"
+        description: |
+          Create service validating coordinate ranges (lat [-90,90], lon [-180,180]),
+          checking GPS accuracy metadata, evaluating confidence scores, and applying
+          terrain-specific accuracy expectations. Produce GREEN/YELLOW/RED accuracy flags.
+        acceptance_criteria:
+          - "Coordinates within valid range with confidence >0.6 and accuracy <500m → GREEN flag"
+          - "Borderline coordinates (accuracy 500-1000m or confidence 0.4-0.6) → YELLOW flag"
+          - "Invalid coordinates (out of range) or very low confidence → RED flag"
+          - "Validation accuracy >95% verified against ground truth test cases"
+          - "Validation events logged with flag rationale"
+        files_to_modify:
+          - "src/services/geolocation_validation_service.py"
+          - "src/models/accuracy_flag.py"
+          - "tests/unit/test_geolocation_validation_service.py"
+          - "tests/unit/test_accuracy_thresholds.py"
+          - "tests/integration/test_validation_scenarios.py"
+        effort_estimate: "2 days"
+        dependencies: ["02-01"]
+        risk_level: "MEDIUM"
+        success_metrics:
+          - "Validation latency <5ms per detection"
+          - "GREEN flag accuracy >95% on test set"
+          - "All 15+ test scenarios passing"
+
+      - step_id: "02-03"
+        title: "Implement FormatTranslationService (to GeoJSON RFC 7946)"
+        description: |
+          Create service transforming validated detections to RFC 7946 compliant GeoJSON
+          Features. Normalize confidence to 0-1 scale (preserve original), build geometry
+          as Point [longitude, latitude], include all metadata properties.
+        acceptance_criteria:
+          - "Output is valid GeoJSON Feature per RFC 7946 specification"
+          - "Geometry uses [longitude, latitude] coordinate order"
+          - "Confidence normalized to 0-1 scale with original preserved in properties"
+          - "Properties include: source, confidence, accuracy_flag, timestamp, audit_trail_id"
+          - "GeoJSON output validates with standard GeoJSON parsers"
+        files_to_modify:
+          - "src/services/format_translation_service.py"
+          - "src/models/geojson.py"
+          - "tests/unit/test_format_translation_service.py"
+          - "tests/unit/test_geojson_validation.py"
+          - "tests/integration/test_format_scenarios.py"
+        effort_estimate: "1.5 days"
+        dependencies: ["02-02"]
+        risk_level: "LOW"
+        success_metrics:
+          - "Translation latency <5ms per detection"
+          - "100% of valid detections produce RFC 7946 compliant GeoJSON"
+          - "GeoJSON output passes linter validation"
+
+      - step_id: "02-04"
+        title: "Implement TACOutputService (TAK Server integration)"
+        description: |
+          Create service outputting GeoJSON Features to TAK Server subscription endpoint
+          via HTTP PUT. Implement connection timeout handling, exponential backoff retry
+          logic, and fallback to offline queue on network failure.
+        acceptance_criteria:
+          - "Valid GeoJSON sent to TAK Server via HTTP PUT"
+          - "Successful output marked SYNCED in detection record"
+          - "Network timeout (>5s) triggers queue fallback"
+          - "Connection refused errors logged and queued for retry"
+          - "Exponential backoff: 100ms → 150ms → 225ms (capped 30s, max 5 attempts)"
+        files_to_modify:
+          - "src/services/tac_output_service.py"
+          - "src/adapters/tak_integration_adapter.py"
+          - "tests/unit/test_tac_output_service.py"
+          - "tests/integration/test_tak_integration.py"
+          - "tests/integration/test_tak_failure_scenarios.py"
+        effort_estimate: "2 days"
+        dependencies: ["02-03"]
+        risk_level: "MEDIUM"
+        success_metrics:
+          - "TAK output latency <2 seconds end-to-end"
+          - "99%+ delivery success rate in normal conditions"
+          - "Graceful degradation when TAK offline"
+
+      - step_id: "02-05"
+        title: "Implement AuditTrailService event logging"
+        description: |
+          Integrate audit trail service across all detection processing steps. Capture
+          events at each service boundary: ingestion, validation, transformation, output,
+          errors. Store with structured schema allowing post-incident investigation.
+        acceptance_criteria:
+          - "Every detection has audit trail with 5+ events minimum"
+          - "Audit events include: received, validated, transformed, output, [errors]"
+          - "Each event has: timestamp (UTC), detection_id, event_type, status, details"
+          - "Queries by detection_id return complete trail in <500ms"
+          - "Retention enforced at 90 days minimum"
+        files_to_modify:
+          - "src/services/audit_trail_service.py"
+          - "src/models/audit_event.py"
+          - "tests/unit/test_audit_trail_integration.py"
+          - "tests/integration/test_audit_trail_scenarios.py"
+        effort_estimate: "1 day"
+        dependencies: ["01-05", "02-01", "02-02", "02-03", "02-04"]
+        risk_level: "LOW"
+        success_metrics:
+          - "Audit trail latency <10ms per event"
+          - "100% of detections have linked audit events"
+          - "Audit trail completeness verified in integration tests"
+
+  - phase_id: "03"
+    title: "Offline-First & Resilience"
+    description: "Implement offline-first architecture with local SQLite queue, automatic sync on connectivity restore, and comprehensive error handling with recovery strategies"
+    duration: "2.5 weeks"
+
+    steps:
+      - step_id: "03-01"
+        title: "Implement OfflineQueueService (SQLite queue)"
+        description: |
+          Create service managing local SQLite queue for detections when network unavailable.
+          Implement enqueue operation (mark PENDING_SYNC), dequeue on success (mark SYNCED),
+          and queue depth query. Design for high-throughput batch sync (1000+ items/second).
+        acceptance_criteria:
+          - "Detection queued to SQLite when output fails (network error)"
+          - "Queued detection marked PENDING_SYNC with timestamps"
+          - "Queue depth queryable for status dashboard"
+          - "Queue supports batch load of 100+ items for sync operations"
+          - "Queue respects max size limit (10,000 detections warning)"
+        files_to_modify:
+          - "src/services/offline_queue_service.py"
+          - "src/adapters/queue_adapter.py"
+          - "tests/unit/test_offline_queue_service.py"
+          - "tests/integration/test_queue_operations.py"
+        effort_estimate: "1.5 days"
+        dependencies: ["01-02", "02-04"]
+        risk_level: "LOW"
+        success_metrics:
+          - "Enqueue operation <5ms"
+          - "Batch load 1000+ items/second"
+          - "Queue depth query <100ms"
+
+      - step_id: "03-02"
+        title: "Implement queue persistence and recovery"
+        description: |
+          Ensure queued detections survive system restarts through persistent SQLite storage.
+          Implement recovery logic on startup: load pending items from queue, verify integrity,
+          and resume sync operations. Test with intentional power-cycle scenarios.
+        acceptance_criteria:
+          - "Queued detections persist to SQLite after system restart"
+          - "System startup recovers all pending items from queue"
+          - "Recovered items resume sync with exponential backoff (not aggressive)"
+          - "Recovery latency <5 seconds for 1000 queued items"
+          - "Corrupted queue items logged and skipped (no silent failures)"
+        files_to_modify:
+          - "src/services/offline_queue_service.py"
+          - "src/startup/recovery_manager.py"
+          - "tests/integration/test_queue_persistence.py"
+          - "tests/integration/test_system_restart_recovery.py"
+        effort_estimate: "1.5 days"
+        dependencies: ["03-01"]
+        risk_level: "MEDIUM"
+        success_metrics:
+          - "Recovery time <5 seconds for 1000 items"
+          - "99.9%+ of queued detections recovered"
+          - "No data loss across reboot cycle"
+
+      - step_id: "03-03"
+        title: "Implement sync mechanism (when network restored)"
+        description: |
+          Create connectivity monitoring service detecting network state changes. When
+          connection restored, trigger automatic batch sync of all PENDING_SYNC items to
+          remote systems. Implement sync algorithm with batching, exponential backoff, and
+          audit trail tracking.
+        acceptance_criteria:
+          - "Connectivity change detected within 30 seconds"
+          - "Sync begins automatically when connection restored (no operator action)"
+          - "Detections synced in batches (100+ items per request) for efficiency"
+          - "All queued items synced or retried with exponential backoff"
+          - "Sync progress visible in status dashboard (3/5 synced)"
+        files_to_modify:
+          - "src/services/offline_queue_service.py"
+          - "src/services/connectivity_monitor.py"
+          - "tests/unit/test_connectivity_monitor.py"
+          - "tests/integration/test_sync_mechanism.py"
+          - "tests/integration/test_network_outage_scenarios.py"
+        effort_estimate: "2 days"
+        dependencies: ["03-01", "03-02"]
+        risk_level: "MEDIUM"
+        success_metrics:
+          - "Connectivity detection latency <30 seconds"
+          - "Sync batch throughput >1000 items/second"
+          - "99%+ of queued items synced successfully"
+
+      - step_id: "03-04"
+        title: "Implement error handling and rollback (E001-E006)"
+        description: |
+          Create comprehensive error handling strategy for all error codes: E001-INVALID_JSON,
+          E002-MISSING_FIELD, E003-INVALID_COORDINATES, E004-API_TIMEOUT, E005-TAK_SERVER_DOWN,
+          E006-QUEUE_FULL. Implement recovery actions: log with severity, queue if appropriate,
+          alert operator only for severe failures.
+        acceptance_criteria:
+          - "All error codes E001-E006 handled with specific recovery action"
+          - "Invalid JSON (E001) logged, detection skipped, polling continues"
+          - "Missing field (E002) rejected with descriptive error message"
+          - "Invalid coordinates (E003) flagged RED for manual review"
+          - "API timeout (E004) retried with exponential backoff"
+          - "TAK Server down (E005) detection queued locally"
+          - "Queue full (E006) alerts operator, stops polling until cleared"
+        files_to_modify:
+          - "src/models/error_codes.py"
+          - "src/services/error_handler_service.py"
+          - "src/recovery_strategies.py"
+          - "tests/unit/test_error_handling.py"
+          - "tests/integration/test_error_recovery_scenarios.py"
+        effort_estimate: "2 days"
+        dependencies: ["02-01", "02-04", "03-03"]
+        risk_level: "MEDIUM"
+        success_metrics:
+          - "All 6 error codes handled correctly"
+          - "Error recovery tests >95% passing"
+          - "System continues operating during transient errors"
+
+  - phase_id: "04"
+    title: "Testing & Production Readiness"
+    description: "Comprehensive testing (unit, integration, acceptance), performance tuning, security hardening, and production deployment preparation"
+    duration: "2.5 weeks"
+
+    steps:
+      - step_id: "04-01"
+        title: "Implement comprehensive unit tests (>80% coverage)"
+        description: |
+          Create unit tests for all service classes: DetectionIngestionService,
+          GeolocationValidationService, FormatTranslationService, etc. Test happy path,
+          error paths, boundary conditions, and all error codes. Target >80% line coverage
+          with focus on business logic.
+        acceptance_criteria:
+          - "Unit test coverage >80% for src/ directory"
+          - "All services have >20 test cases each"
+          - "Tests cover: happy path, error conditions, boundary values"
+          - "All error codes (E001-E006) tested with recovery paths"
+          - "Confidence threshold tests: GREEN/YELLOW/RED logic verified"
+        files_to_modify:
+          - "tests/unit/test_*.py (all service tests)"
+          - "tests/fixtures/sample_detections.py"
+          - "tests/fixtures/mock_adapters.py"
+          - ".coveragerc"
+        effort_estimate: "3 days"
+        dependencies: ["02-01", "02-02", "02-03", "02-04", "02-05", "03-04"]
+        risk_level: "LOW"
+        success_metrics:
+          - "Coverage report shows >80% line coverage"
+          - "All unit tests passing"
+          - "Test execution time <30 seconds"
+
+      - step_id: "04-02"
+        title: "Implement integration tests (test containers)"
+        description: |
+          Create integration tests using test containers (testcontainers library) for SQLite,
+          mock TAK Server endpoint, and full end-to-end flows. Test: detection ingestion through
+          TAK output, offline queue sync, error recovery, network failure scenarios.
+        acceptance_criteria:
+          - "Integration tests cover all 5 P0 user stories end-to-end"
+          - "Mock TAK Server simulates success, timeout, and 500 error scenarios"
+          - "Queue sync tested with simulated network unavailability"
+          - "All integration tests pass with testcontainers"
+          - "Integration test execution time <5 minutes"
+        files_to_modify:
+          - "tests/integration/test_*.py (all end-to-end flows)"
+          - "tests/integration/mock_tak_server.py"
+          - "tests/integration/conftest.py"
+          - "docker-compose.test.yaml"
+        effort_estimate: "3 days"
+        dependencies: ["04-01"]
+        risk_level: "MEDIUM"
+        success_metrics:
+          - "All integration tests passing"
+          - "Coverage includes 100% of API endpoints"
+          - "Network failure scenarios handled correctly"
+
+      - step_id: "04-03"
+        title: "Implement acceptance tests (pytest-bdd with walking skeleton)"
+        description: |
+          Create acceptance tests using pytest-bdd framework written in Gherkin language.
+          Test user stories from perspective of end users: dispatcher seeing detections on map,
+          integration specialist setting up sources, operator verifying accuracy flags. Use
+          walking skeleton feature file.
+        acceptance_criteria:
+          - "All 5 P0 user stories have BDD scenarios (Given-When-Then)"
+          - "Scenarios cover happy path and error cases"
+          - "Tests run end-to-end with Docker containers"
+          - "Test data includes all detection source types (satellite, UAV, camera)"
+          - "Scenario execution validates business requirements met"
+        files_to_modify:
+          - "tests/acceptance/features/detection_ingestion.feature"
+          - "tests/acceptance/features/geolocation_validation.feature"
+          - "tests/acceptance/features/format_translation.feature"
+          - "tests/acceptance/features/tak_output.feature"
+          - "tests/acceptance/features/offline_queue.feature"
+          - "tests/acceptance/steps/detection_steps.py"
+          - "tests/acceptance/conftest.py"
+        effort_estimate: "2 days"
+        dependencies: ["04-02"]
+        risk_level: "LOW"
+        success_metrics:
+          - "All 5 P0 stories have BDD feature files"
+          - "All scenarios passing"
+          - "Test execution <10 minutes"
+
+      - step_id: "04-04"
+        title: "Performance tuning and optimization"
+        description: |
+          Profile system under load (10+ detections/second). Identify bottlenecks and optimize:
+          database query indices, connection pool sizing, async I/O efficiency, JSON parsing
+          speed. Target latency: detection ingestion <100ms, API→TAK <2 seconds.
+        acceptance_criteria:
+          - "System handles 10+ detections/second without degradation"
+          - "Ingestion latency <100ms (p99)"
+          - "Detection→TAK latency <2 seconds (p99)"
+          - "Database queries <500ms for standard operations"
+          - "Load test with 1000 concurrent detections validates no data loss"
+        files_to_modify:
+          - "tests/performance/load_test.py"
+          - "tests/performance/latency_profiling.py"
+          - "src/config.py (tuning parameters)"
+          - "docs/performance-baseline.md"
+        effort_estimate: "2 days"
+        dependencies: ["04-02"]
+        risk_level: "MEDIUM"
+        success_metrics:
+          - "Load test results documented"
+          - "Latency targets achieved (p99)"
+          - "No data loss under load"
+
+      - step_id: "04-05"
+        title: "Production hardening (security, monitoring, documentation)"
+        description: |
+          Harden system for production: API authentication/rate limiting, secrets management
+          (environment variables), health check integration for Kubernetes, centralized logging,
+          monitoring dashboards (if applicable), deployment documentation, runbook for operations.
+        acceptance_criteria:
+          - "API endpoints require authentication (API key validation)"
+          - "Rate limiting enforced: 1000 requests/minute per client"
+          - "Secrets (TAK URL, API keys) read from environment variables only"
+          - "Health check endpoint suitable for Kubernetes probes"
+          - "Structured logs JSON-formatted for log aggregation"
+          - "Deployment documentation complete and tested"
+          - "Runbook covers: startup, shutdown, failure recovery, log analysis"
+        files_to_modify:
+          - "src/auth/api_key_validator.py"
+          - "src/middleware/rate_limiter.py"
+          - "src/config.py (secrets management)"
+          - "src/health_check.py (Kubernetes probes)"
+          - "docs/deployment-guide.md"
+          - "docs/operations-runbook.md"
+          - "docker-compose.prod.yaml"
+          - "kubernetes/deployment.yaml"
+        effort_estimate: "2 days"
+        dependencies: ["04-01", "04-02", "04-03", "04-04"]
+        risk_level: "MEDIUM"
+        success_metrics:
+          - "API authentication verified in tests"
+          - "Rate limiting tested with load scenario"
+          - "No hardcoded secrets in source code"
+          - "Kubernetes probes functional"
+          - "Deployment to Docker tested successfully"
+
+  - phase_id: "05"
+    title: "Optional P1 Features (if time permits)"
+    description: "Configuration UI and source format auto-detection to reduce setup time below 10 minutes"
+    duration: "1-2 weeks (optional)"
+
+    steps:
+      - step_id: "05-01"
+        title: "Implement detection source configuration API"
+        description: |
+          Create REST API endpoints for source configuration: POST /api/v1/sources (register),
+          GET /api/v1/sources (list), PUT /api/v1/sources/{id} (update), POST /api/v1/sources/{id}/test
+          (validate connectivity). Enable operators to add new detection sources without code changes.
+        acceptance_criteria:
+          - "POST /api/v1/sources creates new detection source configuration"
+          - "Configuration includes: name, type, endpoint, auth method, polling interval, field mapping"
+          - "PUT /api/v1/sources/{id} updates source configuration"
+          - "GET /api/v1/sources returns list of configured sources"
+          - "Source configuration persists to database"
+        files_to_modify:
+          - "src/routes/sources.py"
+          - "src/services/source_configuration_service.py"
+          - "src/models/source_config.py"
+          - "tests/integration/test_source_configuration_api.py"
+        effort_estimate: "2 days"
+        dependencies: ["04-05"]
+        risk_level: "LOW"
+        success_metrics:
+          - "Source configuration saved and retrieved correctly"
+          - "API validates all required fields"
+          - "Configuration endpoints tested end-to-end"
+
+      - step_id: "05-02"
+        title: "Implement format auto-detection from sample"
+        description: |
+          Create service that fetches sample detection from configured API and analyzes JSON
+          structure to auto-detect field mappings. Identify latitude/longitude fields, confidence
+          fields, and suggest field mapping configuration to operator.
+        acceptance_criteria:
+          - "POST /api/v1/sources/{id}/test fetches sample detection from API"
+          - "Auto-detection identifies latitude field (latitude, lat, y, etc.)"
+          - "Auto-detection identifies longitude field (longitude, lon, x, etc.)"
+          - "Auto-detection identifies confidence field and scale (0-1, 0-100, percent, text)"
+          - "Detection suggests field mapping with >80% confidence"
+        files_to_modify:
+          - "src/services/format_detection_service.py"
+          - "src/models/field_mapping.py"
+          - "tests/unit/test_format_detection_service.py"
+          - "tests/integration/test_format_detection_scenarios.py"
+        effort_estimate: "1.5 days"
+        dependencies: ["05-01"]
+        risk_level: "MEDIUM"
+        success_metrics:
+          - "Format detection accuracy >80% on diverse API formats"
+          - "Detection time <5 seconds for typical API response"
+          - "Detected mappings correct in 20+ test scenarios"
+
+summary:
+  total_steps: 22
+  total_phases: 5
+  baseline_effort_weeks: 10
+  target_timeline: "8-12 weeks"
+  team_recommended: "2-3 engineers"
+
+  phase_breakdown:
+    - phase: "01"
+      name: "Foundation & Walking Skeleton"
+      duration_weeks: 2
+      step_count: 6
+      focus: "Infrastructure and core service structure"
+
+    - phase: "02"
+      name: "Core Features"
+      duration_weeks: 3
+      step_count: 5
+      focus: "Detection processing pipeline"
+
+    - phase: "03"
+      name: "Offline-First & Resilience"
+      duration_weeks: 2.5
+      step_count: 4
+      focus: "Reliability and offline operation"
+
+    - phase: "04"
+      name: "Testing & Production"
+      duration_weeks: 2.5
+      step_count: 5
+      focus: "Quality assurance and hardening"
+
+    - phase: "05"
+      name: "Optional Features"
+      duration_weeks: 1
+      step_count: 2
+      focus: "Setup time reduction (P1, if time available)"
+
+  key_milestones:
+    - week_2: "Walking skeleton MVP deployable (Phase 01 complete)"
+    - week_5: "Core pipeline complete, single detection end-to-end (Phase 02 complete)"
+    - week_7: "Offline-first resilience operational (Phase 03 complete)"
+    - week_10: "All tests passing, production-ready (Phase 04 complete)"
+    - week_12: "Optional features implemented, full MVP (Phase 05 if time available)"
+
+  success_criteria:
+    integration_time: "<1 hour per new detection source (vs 2-3 weeks baseline)"
+    manual_validation: "5 min/mission (vs 30 min baseline, 80% savings)"
+    system_reliability: ">99% of detections reach map"
+    detection_latency: "<2 seconds API to map (tactical operations)"
+    setup_time: "<10 minutes source configuration"
+    audit_coverage: "100% of detections logged"
+    test_coverage: ">80% unit test coverage"
+    acceptance_tests: "All 5 P0 stories have BDD scenarios"
+
+risk_register:
+  - risk_id: "R001"
+    title: "TAK Server Integration Complexity"
+    likelihood: "MEDIUM"
+    impact: "HIGH"
+    mitigation: "Week 1 proof-of-concept with TAK team, mock server for testing"
+
+  - risk_id: "R002"
+    title: "Geolocation Accuracy Below Expectations"
+    likelihood: "MEDIUM"
+    impact: "MEDIUM"
+    mitigation: "System flags, not fixes. Operator spot-check validated against field data."
+
+  - risk_id: "R003"
+    title: "Offline Queue Unbounded Growth"
+    likelihood: "LOW"
+    impact: "MEDIUM"
+    mitigation: "Max queue size 10K, alert at threshold, batch sync >1000 items/sec"
+
+  - risk_id: "R004"
+    title: "Performance Under High Volume"
+    likelihood: "LOW"
+    impact: "MEDIUM"
+    mitigation: "Load testing in Phase 04, async I/O throughout, connection pooling"
+
+dependencies:
+  external_systems:
+    - "TAK Server (endpoint URL, credentials for integration testing)"
+    - "Sample detection APIs (satellite fire detection, UAV control station data)"
+    - "Kubernetes cluster (optional for Phase 2+ deployment)"
+
+  team_dependencies:
+    - "Security team review for authentication/rate limiting implementation"
+    - "Operations team input on runbook and alerting"
+    - "TAK integration specialist for end-to-end validation"
+
+quality_gates:
+  - phase: "01"
+    gates:
+      - "Walking skeleton health check responds 200"
+      - "Docker image builds and runs successfully"
+      - "SQLite schema created with all tables"
+
+  - phase: "02"
+    gates:
+      - "End-to-end detection ingestion to GeoJSON works"
+      - "Audit trail captures all events"
+      - "Green flag accuracy >95% on test set"
+
+  - phase: "03"
+    gates:
+      - "Queue persistence survives reboot"
+      - "Automatic sync on connectivity restore works"
+      - "All error codes E001-E006 handled"
+
+  - phase: "04"
+    gates:
+      - "Unit test coverage >80%"
+      - "All BDD scenarios passing"
+      - "Load test passes (10+ detections/sec)"
+      - "Production hardening complete"
+
+  - phase: "05"
+    gates:
+      - "Source configuration API tested"
+      - "Format auto-detection >80% accurate"
+      - "Setup time <10 minutes validated"
+
+document_status: "READY FOR BUILD WAVE"
+next_step: "Handoff to software-crafter for implementation during BUILD wave"
