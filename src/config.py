@@ -15,6 +15,10 @@ class Config:
             "http://127.0.0.1:3000",
         ]
         self.debug: bool = os.getenv("DEBUG", "False").lower() == "true"
+        self.tak_server_url: str = os.getenv(
+            "TAK_SERVER_URL",
+            "http://localhost:8080/CoT"
+        )
 
 
 def get_config() -> Config:
