@@ -5,187 +5,58 @@ on:
     types: [opened, labeled, closed]
   pull_request:
     types: [opened, ready_for_review, review_requested, synchronize]
-  workflow_run:
-    workflows: ["Issue to PR Workflow", "CI/CD Pipeline"]
-    types: [completed]
 
 jobs:
   notify-discord:
     name: Send Discord Notification
     runs-on: ubuntu-latest
-    if: github.event.repository.private == false
     steps:
-      - name: Parse issue event
-        if: github.event_name == 'issues'
-        id: issue
-        run: |
-          ISSUE_NUM=${{ github.event.issue.number }}
-          ISSUE_TITLE="${{ github.event.issue.title }}"
-          ISSUE_URL="${{ github.event.issue.html_url }}"
-          ACTION="${{ github.event.action }}"
-          AUTHOR="${{ github.event.issue.user.login }}"
-          LABELS="${{ join(github.event.issue.labels.*.name, ', ') }}"
-
-          echo "title=$ISSUE_TITLE" >> $GITHUB_OUTPUT
-          echo "url=$ISSUE_URL" >> $GITHUB_OUTPUT
-          echo "number=$ISSUE_NUM" >> $GITHUB_OUTPUT
-          echo "action=$ACTION" >> $GITHUB_OUTPUT
-          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
-          echo "labels=$LABELS" >> $GITHUB_OUTPUT
-
-      - name: Parse PR event
-        if: github.event_name == 'pull_request'
-        id: pr
-        run: |
-          PR_NUM=${{ github.event.pull_request.number }}
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          PR_URL="${{ github.event.pull_request.html_url }}"
-          ACTION="${{ github.event.action }}"
-          AUTHOR="${{ github.event.pull_request.user.login }}"
-
-          echo "title=$PR_TITLE" >> $GITHUB_OUTPUT
-          echo "url=$PR_URL" >> $GITHUB_OUTPUT
-          echo "number=$PR_NUM" >> $GITHUB_OUTPUT
-          echo "action=$ACTION" >> $GITHUB_OUTPUT
-          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
-
       - name: Discord notification - Issue opened
         if: github.event_name == 'issues' && github.event.action == 'opened'
-        uses: sarisia/actions-status-discord@v1
+        uses: tsickert/discord-webhook@v1
         with:
-          webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          status: custom
-          custom_payload: |
-            {
-              "embeds": [{
-                "title": "📋 New Issue Created",
-                "description": "${{ steps.issue.outputs.title }}",
-                "url": "${{ steps.issue.outputs.url }}",
-                "color": 3447003,
-                "fields": [
-                  {
-                    "name": "Issue #",
-                    "value": "${{ steps.issue.outputs.number }}",
-                    "inline": true
-                  },
-                  {
-                    "name": "Author",
-                    "value": "${{ steps.issue.outputs.author }}",
-                    "inline": true
-                  },
-                  {
-                    "name": "Labels",
-                    "value": "${{ steps.issue.outputs.labels || 'None' }}",
-                    "inline": false
-                  }
-                ],
-                "footer": {
-                  "text": "geolocation-engine2"
-                }
-              }]
-            }
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          embed-title: "📋 New Issue Created"
+          embed-description: "${{ github.event.issue.title }}"
+          embed-url: "${{ github.event.issue.html_url }}"
+          embed-color: 3447003
 
       - name: Discord notification - Issue labeled
         if: github.event_name == 'issues' && github.event.action == 'labeled'
-        uses: sarisia/actions-status-discord@v1
+        uses: tsickert/discord-webhook@v1
         with:
-          webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          status: custom
-          custom_payload: |
-            {
-              "embeds": [{
-                "title": "🏷️ Issue Labeled",
-                "description": "${{ steps.issue.outputs.title }}",
-                "url": "${{ steps.issue.outputs.url }}",
-                "color": 15158332,
-                "fields": [
-                  {
-                    "name": "Issue #",
-                    "value": "${{ steps.issue.outputs.number }}",
-                    "inline": true
-                  },
-                  {
-                    "name": "New Labels",
-                    "value": "${{ steps.issue.outputs.labels }}",
-                    "inline": false
-                  }
-                ]
-              }]
-            }
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          embed-title: "🏷️ Issue Labeled"
+          embed-description: "${{ github.event.issue.title }}"
+          embed-url: "${{ github.event.issue.html_url }}"
+          embed-color: 15158332
 
       - name: Discord notification - Issue closed
         if: github.event_name == 'issues' && github.event.action == 'closed'
-        uses: sarisia/actions-status-discord@v1
+        uses: tsickert/discord-webhook@v1
         with:
-          webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          status: custom
-          custom_payload: |
-            {
-              "embeds": [{
-                "title": "✅ Issue Closed",
-                "description": "${{ steps.issue.outputs.title }}",
-                "url": "${{ steps.issue.outputs.url }}",
-                "color": 3066993,
-                "fields": [
-                  {
-                    "name": "Issue #",
-                    "value": "${{ steps.issue.outputs.number }}",
-                    "inline": true
-                  }
-                ]
-              }]
-            }
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          embed-title: "✅ Issue Closed"
+          embed-description: "${{ github.event.issue.title }}"
+          embed-url: "${{ github.event.issue.html_url }}"
+          embed-color: 3066993
 
       - name: Discord notification - PR opened
         if: github.event_name == 'pull_request' && github.event.action == 'opened'
-        uses: sarisia/actions-status-discord@v1
+        uses: tsickert/discord-webhook@v1
         with:
-          webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          status: custom
-          custom_payload: |
-            {
-              "embeds": [{
-                "title": "🚀 Pull Request Opened",
-                "description": "${{ steps.pr.outputs.title }}",
-                "url": "${{ steps.pr.outputs.url }}",
-                "color": 9437184,
-                "fields": [
-                  {
-                    "name": "PR #",
-                    "value": "${{ steps.pr.outputs.number }}",
-                    "inline": true
-                  },
-                  {
-                    "name": "Author",
-                    "value": "${{ steps.pr.outputs.author }}",
-                    "inline": true
-                  }
-                ],
-                "footer": {
-                  "text": "Ready for review"
-                }
-              }]
-            }
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          embed-title: "🚀 Pull Request Opened"
+          embed-description: "${{ github.event.pull_request.title }}"
+          embed-url: "${{ github.event.pull_request.html_url }}"
+          embed-color: 9437184
 
       - name: Discord notification - PR ready for review
         if: github.event_name == 'pull_request' && github.event.action == 'ready_for_review'
-        uses: sarisia/actions-status-discord@v1
+        uses: tsickert/discord-webhook@v1
         with:
-          webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          status: custom
-          custom_payload: |
-            {
-              "embeds": [{
-                "title": "👀 PR Ready for Review",
-                "description": "${{ steps.pr.outputs.title }}",
-                "url": "${{ steps.pr.outputs.url }}",
-                "color": 16776960,
-                "fields": [
-                  {
-                    "name": "PR #",
-                    "value": "${{ steps.pr.outputs.number }}",
-                    "inline": true
-                  }
-                ]
-              }]
-            }
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          embed-title: "👀 PR Ready for Review"
+          embed-description: "${{ github.event.pull_request.title }}"
+          embed-url: "${{ github.event.pull_request.html_url }}"
+          embed-color: 16776960
