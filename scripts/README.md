@@ -34,10 +34,9 @@ python3 scripts/render_progress_pdf.py docs/feature/ai-detection-cop-integration
 - `markdown` - Markdown to HTML conversion
 - Both installed automatically, use `pip install weasyprint markdown`
 
-### `progress_generator.py` (DEPRECATED)
-**Purpose:** Generate hardcoded PDF from structured data (kept for reference)
+### ~~`progress_generator.py`~~ (REMOVED - Use render_progress_pdf.py instead)
 
-**Note:** `render_progress_pdf.py` is now the recommended approach as it:
+**Note:** Replaced by `render_progress_pdf.py` which:
 - Renders actual PROGRESS.md content instead of hardcoded data
 - Matches visual appearance in IDE exactly
 - Updates automatically when PROGRESS.md changes
@@ -60,8 +59,8 @@ python3 scripts/render_progress_pdf.py docs/feature/ai-detection-cop-integration
 ## Workflow Integration
 
 ### After Every Commit
-1. **Manual:** Run `python3 scripts/progress_generator.py` to regenerate PDF
-2. **Result:** Live PDF always reflects latest PROGRESS.md
+1. **Automatic:** Git post-commit hook runs `render_progress_pdf.py` automatically
+2. **Result:** Live PDF always reflects latest PROGRESS.md (no manual steps needed)
 
 ### Key Sections to Update in PROGRESS.md
 - Phase completion bars (when steps marked DONE)
@@ -89,7 +88,7 @@ git commit -m "your change"
 # → PDF automatically updated in repo
 
 # Manual generation if needed
-python3 scripts/progress_generator.py
+python3 scripts/render_progress_pdf.py
 
 # PDF is always in repo, version-controlled
 # Located at: docs/feature/ai-detection-cop-integration/PROGRESS.pdf
@@ -97,7 +96,8 @@ python3 scripts/progress_generator.py
 
 ## Dependencies
 
-- `reportlab` (installed via pip)
+- `weasyprint` - HTML/CSS to PDF rendering
+- `markdown` - Markdown to HTML conversion
 - Python 3.8+
 
 ---

@@ -324,13 +324,15 @@ Health check endpoint.
 ### Run All Tests
 
 ```bash
-# Unit tests (69 tests)
+# Unit tests (124 tests)
 pytest tests/unit/ -v
 
 # Specific test suites
 pytest tests/unit/test_geolocation_service.py -v  # 27 tests
 pytest tests/unit/test_cot_service.py -v          # 15 tests
-pytest tests/unit/test_schemas.py -v              # 27 tests
+pytest tests/unit/test_audit_trail_service.py -v  # 41 tests
+pytest tests/unit/test_offline_queue_service.py -v # 37 tests
+pytest tests/unit/test_config.py -v               # 4 tests
 
 # With coverage
 pytest tests/unit/ --cov=src --cov-report=html
@@ -338,10 +340,12 @@ pytest tests/unit/ --cov=src --cov-report=html
 
 ### Test Breakdown
 
-- **Geolocation tests** (27): Photogrammetry validation
-- **CoT service tests** (15): XML generation and TAK integration
-- **Schema tests** (27): Data model validation
-- **Total**: 69 passing tests ✅
+- **Audit Trail Service** (41): Immutable event logging
+- **Offline Queue Service** (37): SQLite queue & persistence
+- **Geolocation Service** (27): Photogrammetry validation
+- **CoT Service** (15): XML generation and TAK integration
+- **Config Service** (4): Configuration validation
+- **Total**: 124 passing tests ✅
 
 ---
 
@@ -378,11 +382,16 @@ src/
 
 tests/
 ├── unit/
+│   ├── test_audit_trail_service.py
+│   ├── test_offline_queue_service.py
 │   ├── test_geolocation_service.py
 │   ├── test_cot_service.py
-│   ├── test_schemas.py
+│   ├── test_config.py
 │   └── conftest.py
-└── acceptance/                 # Feature tests (COMING)
+├── integration/
+│   ├── test_detection_api.py
+│   └── test_database_schema.py
+└── acceptance/                 # Feature acceptance tests
 
 docs/
 ├── architecture/               # Design decisions
@@ -472,22 +481,26 @@ docs/
 
 ## 🎯 Roadmap
 
-### ✅ Completed
-- Photogrammetry engine (ground plane intersection)
-- CoT/TAK output format (native XML)
-- 69 passing tests
-- Complete input validation
+### ✅ Completed (Phases 01-03)
+- Photogrammetry engine (ground plane intersection, confidence calculation)
+- CoT/TAK output format (native XML with color mapping)
+- 124 passing unit tests (audit, queue, geolocation, CoT, config)
+- Complete input validation and error handling
+- SQLite offline queue with persistence and recovery
+- Immutable audit trail with 10 event types
+- Database migrations and ORM models
+- Integration test infrastructure
 
-### 🔄 In Progress
-- Database migrations
-- Acceptance test implementation
-- Integration testing with TAK mock
+### 🔄 In Progress (Phase 04)
+- JWT authentication
+- Rate limiting
+- Load testing & optimization
 
-### ⏭️ Planned
-- GCP calibration for improved accuracy
-- Offline queue and sync
-- Production deployment
+### ⏭️ Planned (Phase 05)
+- Kubernetes manifests
+- Monitoring & alerting
 - Performance optimization
+- GCP calibration for improved accuracy
 
 ---
 
@@ -499,4 +512,4 @@ docs/
 
 **Last Updated**: 2026-02-15
 **Version**: 0.1.0
-**Status**: Building DELIVER Wave
+**Status**: Feature Complete (Phases 01-03) | Phase 04 In Progress
