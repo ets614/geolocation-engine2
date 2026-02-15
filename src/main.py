@@ -3,6 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from src.config import get_config
 from src.middleware import setup_middleware
+from src.api.routes import router as detection_router
 
 # Create FastAPI app
 config = get_config()
@@ -14,6 +15,9 @@ app = FastAPI(
 
 # Setup middleware
 setup_middleware(app, config)
+
+# Register routes
+app.include_router(detection_router)
 
 
 # Health check endpoint
