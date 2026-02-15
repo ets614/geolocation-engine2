@@ -95,3 +95,35 @@ class JWTService:
         """
         payload = self.verify_token(token)
         return payload.get("sub", "")
+
+    def refresh_token(self, token: str, expires_in_minutes: int = 60) -> str:
+        """Refresh a JWT token by issuing a new one with the same claims.
+
+        The original token must still be valid (not expired).
+
+        Args:
+            token: Existing valid JWT token to refresh.
+            expires_in_minutes: Expiration for the new token.
+
+        Returns:
+            str: New JWT token with refreshed expiration.
+
+        Raises:
+            ValueError: If original token is invalid or expired.
+        """
+        payload = self.verify_token(token)
+        subject = payload.get("sub")
+        if not subject:
+            raise ValueError("Token missing subject claim")
+
+        # Carry forward non-standard claims
+        additional_claims = {
+            k: v for k, v in payload.items()
+            if k not in ("sub", "iat", "exp")
+        }
+
+        return self.generate_token(
+            subject=subject,
+            expires_in_minutes=expires_in_minutes,
+            additional_claims=additional_claims if additional_claims else None,
+        )

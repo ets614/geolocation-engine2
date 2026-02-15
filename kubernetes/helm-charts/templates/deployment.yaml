@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "detection-api.fullname" . }}
+  labels:
+    {{- include "detection-api.labels" . | nindent 4 }}
+    slot: {{ .Values.blueGreen.activeSlot }}
+spec:
+  replicas: {{ .Values.app.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "detection-api.selectorLabels" . | nindent 6 }}
+      slot: {{ .Values.blueGreen.activeSlot }}
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.port }}"
+        prometheus.io/path: "/metrics"
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      labels:
+        {{- include "detection-api.selectorLabels" . | nindent 8 }}
+        slot: {{ .Values.blueGreen.activeSlot }}
+    spec:
+      serviceAccountName: {{ include "detection-api.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: 30
+      initContainers:
+        - name: init-queue-db
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ['sh', '-c', 'mkdir -p /app/data && touch /app/data/queue.db || true']
+          volumeMounts:
+            - name: persistent-storage
+              mountPath: /app/data
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.port }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: ENVIRONMENT
+              value: {{ .Values.env.ENVIRONMENT | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.env.LOG_LEVEL | quote }}
+            - name: TAK_SERVER_ENDPOINT
+              value: {{ .Values.env.TAK_SERVER_ENDPOINT | quote }}
+            - name: GEOLOCATION_ACCURACY_THRESHOLD_GREEN
+              value: {{ .Values.env.GEOLOCATION_ACCURACY_THRESHOLD_GREEN | quote }}
+            - name: GEOLOCATION_ACCURACY_THRESHOLD_YELLOW
+              value: {{ .Values.env.GEOLOCATION_ACCURACY_THRESHOLD_YELLOW | quote }}
+            - name: OFFLINE_QUEUE_MAX_SIZE
+              value: {{ .Values.env.OFFLINE_QUEUE_MAX_SIZE | quote }}
+            - name: OFFLINE_QUEUE_BATCH_SIZE
+              value: {{ .Values.env.OFFLINE_QUEUE_BATCH_SIZE | quote }}
+            - name: OFFLINE_SYNC_INTERVAL
+              value: {{ .Values.env.OFFLINE_SYNC_INTERVAL | quote }}
+            - name: OFFLINE_QUEUE_PATH
+              value: "/app/data/queue.db"
+            - name: TAK_SERVER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tak_server_username.name }}
+                  key: {{ .Values.secrets.tak_server_username.key }}
+            - name: TAK_SERVER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.tak_server_password.name }}
+                  key: {{ .Values.secrets.tak_server_password.key }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: persistent-storage
+              mountPath: /app/data
+            - name: config-volume
+              mountPath: /app/config
+              readOnly: true
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - sleep 15
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      volumes:
+        - name: persistent-storage
+          persistentVolumeClaim:
+            claimName: {{ include "detection-api.fullname" . }}-queue-pvc
+        - name: config-volume
+          configMap:
+            name: {{ include "detection-api.fullname" . }}-config
+            defaultMode: 0644
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always

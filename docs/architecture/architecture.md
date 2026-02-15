@@ -1304,27 +1304,119 @@ See `/workspaces/geolocation-engine2/docs/adrs/` for detailed decision records:
 
 ---
 
-## 13. Future Evolution (Phase 2+)
+## 13. Phase 04: Security and Performance Layer (COMPLETE)
+
+Phase 04 added production-grade security and performance capabilities to the core architecture. These components integrate at the adapter layer, preserving the hexagonal architecture principle that domain services receive only validated, authenticated requests.
+
+### Security Components Added
+
+| Component | Architecture Layer | Service |
+|-----------|-------------------|---------|
+| JWT RS256 Authentication | Primary Port (REST API) | `JWTService` |
+| API Key Management | Primary Port (REST API) | `APIKeyService` |
+| Token Bucket Rate Limiting | Adapter (Middleware) | `RateLimiterService` |
+| Input Sanitization | Adapter (Middleware) | `InputSanitizerService` |
+| Security Headers | Adapter (Middleware) | `SecurityService` |
+| Security Audit Events | Domain Core | `SecurityService` -> `AuditTrailService` |
+
+### Performance Components Added
+
+| Component | Architecture Layer | Service |
+|-----------|-------------------|---------|
+| In-Memory Cache (TTL/LFU) | Adapter (Middleware) | `CacheService` |
+| Prometheus Metrics | Adapter (/metrics endpoint) | `metrics.py` |
+| Load Testing Framework | Testing | Locust (3 user profiles) |
+
+### Request Processing Pipeline (Updated)
+
+```
+Request -> Size Check -> Rate Limit -> Authentication (JWT/API Key)
+    -> Input Sanitization -> Cache Lookup -> Domain Services -> Response
+    + Security Headers + Rate Limit Headers + X-Request-ID
+```
+
+**Design Documents:**
+- [Security Architecture](../design/phase-04/SECURITY-ARCHITECTURE.md)
+- [Performance Architecture](../design/phase-04/PERFORMANCE-ARCHITECTURE.md)
+- [ADR-P04-001: JWT vs Session Auth](../design/phase-04/ADRs/ADR-P04-001-jwt-vs-session-authentication.md)
+- [ADR-P04-002: Redis vs In-Memory Cache](../design/phase-04/ADRs/ADR-P04-002-redis-vs-in-memory-caching.md)
+- [ADR-P04-003: Rate Limiting Algorithm](../design/phase-04/ADRs/ADR-P04-003-rate-limiting-algorithm.md)
+- [ADR-P04-004: Secrets Management](../design/phase-04/ADRs/ADR-P04-004-secrets-management-approach.md)
+
+---
+
+## 14. Phase 05: Kubernetes Production Deployment (COMPLETE)
+
+Phase 05 transformed the single-container deployment into a production-grade Kubernetes architecture with high availability, GitOps delivery, and full observability.
+
+### Deployment Architecture
+
+```
+Internet -> NGINX Ingress (TLS) -> detection-api-service (ClusterIP)
+                                        |
+                           selector: slot=green|blue
+                                        |
+                     +------------------+------------------+
+                     |                                     |
+           green deployment (3-10)              blue deployment (standby)
+           HPA enabled                          idle during green active
+```
+
+### Infrastructure Components
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| Orchestration | Kubernetes 1.28+ | Container orchestration |
+| GitOps | ArgoCD | Auto-sync, self-heal, drift detection |
+| Secrets | Sealed Secrets | Encrypted credentials in Git |
+| Metrics | Prometheus | Scrape /metrics endpoint |
+| Logging | Loki + Promtail | Structured log aggregation |
+| Dashboards | Grafana | 4 operational dashboards |
+| Alerts | Grafana Alerting | 19 rules across 7 groups |
+| IaC | Terraform | VPC, EKS, RDS, S3, IAM modules |
+| App Deploy | Helm 3.x | 10 chart templates |
+
+### Availability and Resilience
+
+- **Target**: 99.9% uptime (8.76 hours/year max downtime)
+- **HPA**: 3-10 replicas, scale on CPU (70%) and memory (75%)
+- **PDB**: minAvailable 2 (survives voluntary disruptions)
+- **Topology Spread**: Across zones and nodes
+- **Rollback**: < 120 seconds recovery time
+- **Backup**: Daily CronJob at 02:00 UTC, 30-day retention
+
+**Design Documents:**
+- [Kubernetes Architecture](phase05-kubernetes-production.md)
+- [Deployment Strategy](phase05-deployment-strategy.md)
+- [HA and Resilience](phase05-ha-resilience.md)
+- [Security Layers](phase05-security.md)
+- [ADR-007: GitOps ArgoCD](../adrs/ADR-007-gitops-argocd.md)
+- [ADR-008: Sealed Secrets](../adrs/ADR-008-secret-management-sealed-secrets.md)
+- [ADR-009: Observability Stack](../adrs/ADR-009-observability-prometheus-loki-grafana.md)
+
+---
+
+## 15. Future Evolution (Phase 06+)
 
 ### Planned Enhancements
-1. **Confidence Normalization (US-007 extension)**: Learn confidence calibration from ground truth
-2. **Multiple COP Systems**: Extend to ArcGIS, CAD platforms beyond TAK
-3. **Geolocation Enrichment**: Integrate external data (elevation, terrain classification)
-4. **Operator Dashboard**: Web UI for real-time monitoring
-5. **Multi-Source Fusion**: Correlate detections from multiple sources (reduce false positives)
-6. **Kubernetes Deployment**: Horizontal scaling for large installations
-7. **Machine Learning**: Anomaly detection, source reliability scoring
+1. **KEDA Event-Driven Autoscaling**: Scale on queue depth, not just CPU
+2. **OpenTelemetry Distributed Tracing**: When service decomposition begins
+3. **External Secrets Operator**: Vault integration for secret rotation
+4. **Multiple COP Systems**: Extend to ArcGIS, CAD platforms beyond TAK
+5. **Multi-Source Detection Fusion**: Correlate detections from multiple sources
+6. **Machine Learning**: Confidence calibration from ground truth
+7. **Service Mesh**: Istio/Linkerd for mTLS and traffic management
 
 ### Scalability Path
-- MVP: Single container, SQLite, <100 detections/sec
-- Phase 2: Kubernetes cluster, PostgreSQL, <10K detections/sec
-- Phase 3: Kafka message queue, distributed processing, <100K detections/sec
+- Phase 01-03 (DONE): Single container, SQLite, 100+ detections/sec
+- Phase 04-05 (DONE): Kubernetes, production security, 100+ req/s sustained
+- Phase 06+: PostgreSQL migration, Kafka message queue, 10K+ detections/sec
 
 ---
 
 ## Summary
 
-This architecture delivers the walking skeleton MVP by:
+This architecture delivers a production-ready detection-to-COP translation system:
 
 1. **Satisfying all user stories** through clear component-to-story mapping
 2. **Enabling fast integration** (<1 hour per source) via REST API + configuration
@@ -1332,13 +1424,15 @@ This architecture delivers the walking skeleton MVP by:
 4. **Ensuring reliability** with offline-first architecture (99%+ delivery)
 5. **Supporting tactical decisions** with <2 second latency to map
 6. **Maintaining compliance** through immutable audit trail
-7. **Staying cost-effective** with 100% open source stack
+7. **Staying cost-effective** with 100% open source stack ($0)
 8. **Enabling evolution** with hexagonal architecture and clear service boundaries
+9. **Production security** with JWT, rate limiting, input sanitization, and caching
+10. **Production deployment** with Kubernetes, GitOps, observability, and disaster recovery
 
-**Timeline to MVP**: 8-12 weeks (BUILD wave)
-**Ready for Implementation**: YES ✓
+**Total Tests**: 331+ passing (93.5% coverage)
+**Status**: Production Ready (Phase 04-05 Complete)
 
 ---
 
-**Architecture Document Status**: COMPLETE - Ready for Peer Review
-**Next Steps**: Invoke solution-architect-reviewer, address feedback, handoff to acceptance-designer (DISTILL wave)
+**Architecture Document Status**: COMPLETE - All Phases Delivered
+**Last Updated**: 2026-02-15

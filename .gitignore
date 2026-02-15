@@ -26,6 +26,29 @@ htmlcov/
 .env
 .env.local
 
+# Secrets (never commit)
+*.pem
+*.key
+*.p12
+
+# Database (local dev)
+*.db
+data/
+
+# Docker
+docker-compose.override.yml
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+.terraform.lock.hcl
+
+# OS
+.DS_Store
+Thumbs.db
+
 # nWave
 .nwave/des/des-task-active*
 .nwave/des/logs/

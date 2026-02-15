@@ -1,0 +1,125 @@
+# Prometheus Operator Helm Values for Detection API Monitoring
+# Install: helm install prometheus prometheus-community/kube-prometheus-stack -f prometheus-values.yaml -n monitoring
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    replicas: 2
+    retention: 120h
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    nodeSelector:
+      node-type: monitoring
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 200m
+        memory: 512Mi
+
+grafana:
+  enabled: true
+  replicas: 1
+  persistence:
+    enabled: true
+    storageClassName: gp3
+    size: 10Gi
+  adminPassword: "change-me-in-production"
+  nodeSelector:
+    node-type: monitoring
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: detection-api
+          orgId: 1
+          folder: "Detection API"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/detection-api
+  dashboards:
+    detection-api:
+      detection-api-overview:
+        file: dashboards/detection-api-overview.json
+      detection-api-slo:
+        file: dashboards/detection-api-slo.json
+
+prometheus:
+  prometheusSpec:
+    replicas: 2
+    retention: 30d
+    retentionSize: "45GB"
+    scrapeInterval: 15s
+    evaluationInterval: 30s
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+    nodeSelector:
+      node-type: monitoring
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 1000m
+        memory: 4Gi
+    additionalScrapeConfigs:
+      - job_name: detection-api
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - default
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_label_slot]
+            action: replace
+            target_label: slot
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+
+    ruleSelector:
+      matchLabels:
+        prometheus: detection-api
+
+nodeExporter:
+  enabled: true
+
+kubeStateMetrics:
+  enabled: true

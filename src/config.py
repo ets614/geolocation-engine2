@@ -26,6 +26,27 @@ class Config:
         self.jwt_algorithm: str = "HS256"
         self.jwt_expiration_minutes: int = 60
 
+        # Rate limiting
+        self.rate_limit_capacity: int = int(
+            os.getenv("RATE_LIMIT_CAPACITY", "100")
+        )
+        self.rate_limit_refill_rate: float = float(
+            os.getenv("RATE_LIMIT_REFILL_RATE", "10.0")
+        )
+
+        # Cache
+        self.cache_ttl_seconds: float = float(
+            os.getenv("CACHE_TTL_SECONDS", "300.0")
+        )
+        self.cache_max_entries: int = int(
+            os.getenv("CACHE_MAX_ENTRIES", "1000")
+        )
+
+        # Security
+        self.enforce_https: bool = os.getenv(
+            "ENFORCE_HTTPS", "False"
+        ).lower() == "true"
+
 
 def get_config() -> Config:
     """Get application configuration.
