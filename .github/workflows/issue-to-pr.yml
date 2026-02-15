@@ -54,38 +54,38 @@ jobs:
           # Route based on wave label (nwave methodology)
           if echo "$LABELS" | grep -q '"wave:design"'; then
             SKILL="nw:design"
-            AGENT_NAME="alex-chen"
+            AGENT_NAME="alex-chen-architect"
           elif echo "$LABELS" | grep -q '"wave:distill"'; then
             SKILL="nw:distill"
-            AGENT_NAME="maya-patel"
+            AGENT_NAME="maya-patel-tester"
           elif echo "$LABELS" | grep -q '"wave:deliver"'; then
             SKILL="nw:deliver"
-            AGENT_NAME="jordan-lee"
+            AGENT_NAME="jordan-lee-crafter"
           elif echo "$LABELS" | grep -q '"wave:devops"'; then
             SKILL="nw:devops"
-            AGENT_NAME="sam-rodriguez"
+            AGENT_NAME="sam-rodriguez-platform"
           elif echo "$LABELS" | grep -q '"wave:support"'; then
             SKILL="nw:root-why"
-            AGENT_NAME="riley-taylor"
+            AGENT_NAME="riley-taylor-troubleshooter"
           elif echo "$LABELS" | grep -q '"wave:finalize"'; then
             SKILL="nw:finalize"
-            AGENT_NAME="casey-kim"
+            AGENT_NAME="casey-kim-documentarian"
           # Fallback to legacy phase labels
           elif echo "$LABELS" | grep -q '"phase-04"'; then
             SKILL="nw:deliver"
-            AGENT_NAME="jordan-lee"
+            AGENT_NAME="jordan-lee-crafter"
           elif echo "$LABELS" | grep -q '"phase-05"'; then
             SKILL="nw:devops"
-            AGENT_NAME="sam-rodriguez"
+            AGENT_NAME="sam-rodriguez-platform"
           elif echo "$LABELS" | grep -q '"research"'; then
             SKILL="nw:research"
             AGENT_NAME="research-team"
           elif echo "$LABELS" | grep -q '"design"'; then
             SKILL="nw:design"
-            AGENT_NAME="alex-chen"
+            AGENT_NAME="alex-chen-architect"
           elif echo "$LABELS" | grep -q '"bug"'; then
             SKILL="nw:root-why"
-            AGENT_NAME="riley-taylor"
+            AGENT_NAME="riley-taylor-troubleshooter"
           fi
 
           echo "skill=$SKILL" >> $GITHUB_OUTPUT
