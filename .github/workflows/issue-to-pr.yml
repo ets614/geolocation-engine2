@@ -44,37 +44,37 @@ jobs:
 
       - name: Determine agent type
         id: determine
+        env:
+          LABELS: ${{ steps.issue.outputs.labels }}
+          TITLE: ${{ steps.issue.outputs.title }}
         run: |
-          labels="${{ steps.issue.outputs.labels }}"
-          title="${{ steps.issue.outputs.title }}"
+          AGENT="nw:deliver"
 
-          if [[ "$labels" == *"phase-04"* ]]; then
-            echo "agent=nw:deliver" >> $GITHUB_OUTPUT
-          elif [[ "$labels" == *"phase-05"* ]]; then
-            echo "agent=nw:devops" >> $GITHUB_OUTPUT
-          elif [[ "$labels" == *"research"* ]]; then
-            echo "agent=nw:research" >> $GITHUB_OUTPUT
-          elif [[ "$labels" == *"design"* ]]; then
-            echo "agent=nw:design" >> $GITHUB_OUTPUT
-          elif [[ "$labels" == *"bug"* ]]; then
-            echo "agent=nw:troubleshooter" >> $GITHUB_OUTPUT
-          else
-            echo "agent=nw:deliver" >> $GITHUB_OUTPUT
+          if echo "$LABELS" | grep -q '"phase-04"'; then
+            AGENT="nw:deliver"
+          elif echo "$LABELS" | grep -q '"phase-05"'; then
+            AGENT="nw:devops"
+          elif echo "$LABELS" | grep -q '"research"'; then
+            AGENT="nw:research"
+          elif echo "$LABELS" | grep -q '"design"'; then
+            AGENT="nw:design"
+          elif echo "$LABELS" | grep -q '"bug"'; then
+            AGENT="nw:troubleshooter"
           fi
 
-          echo "title=${{ steps.issue.outputs.title }}" >> $GITHUB_OUTPUT
-          echo "body=${{ steps.issue.outputs.body }}" >> $GITHUB_OUTPUT
+          echo "agent=$AGENT" >> $GITHUB_OUTPUT
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
 
       - name: Create job marker file
         run: |
           mkdir -p .nwave/jobs
-          cat > ".nwave/jobs/issue-${{ steps.issue.outputs.number }}.json" << 'EOF'
+          CREATED_AT=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          cat > ".nwave/jobs/issue-${{ steps.issue.outputs.number }}.json" << EOF
           {
             "issue_number": ${{ steps.issue.outputs.number }},
-            "title": "${{ steps.determine.outputs.title }}",
             "agent": "${{ steps.determine.outputs.agent }}",
             "status": "pending",
-            "created_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            "created_at": "$CREATED_AT"
           }
           EOF
 
@@ -91,15 +91,21 @@ jobs:
     name: Notify Issue Routed
     runs-on: ubuntu-latest
     needs: route-issue
+    if: success()
+    permissions:
+      issues: write
     steps:
       - name: Comment on issue
         uses: actions/github-script@v7
         with:
           script: |
             const issueNumber = context.payload.issue?.number || context.inputs.issue_number;
+            const agent = "${{ needs.route-issue.outputs.agent-type }}";
+            const body = `🤖 **Agent Routing**: \`${agent}\`\n\nThis issue has been routed to **${agent}** for execution.\n\n📝 **Next Steps:**\nThe agent will process this issue and create a PR with the implementation.\n\n👀 Watch for the PR creation notification.`;
+
             github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: `🤖 **Agent Routing**: \`${{ needs.route-issue.outputs.agent-type }}\`\n\nThis issue has been routed to **${{ needs.route-issue.outputs.agent-type }}** for execution.\n\n📝 **Next Steps:**\nThe agent will process this issue and create a PR with the implementation.\n\n👀 Watch for the PR creation notification.`
+              body: body
             });
