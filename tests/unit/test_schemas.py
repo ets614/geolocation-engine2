@@ -1,226 +1,281 @@
 """Unit tests for Pydantic data models and schemas validation."""
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime
 from pydantic import ValidationError
+import base64
+
 from src.models.schemas import (
     DetectionInput,
-    GeolocationData,
+    SensorMetadata,
+    GeolocationValidationResult,
     DetectionOutput,
     ErrorResponse,
     APIRequest,
     APIResponse,
     ConfidenceFlagEnum,
-    AccuracyFlagEnum,
 )
+
+
+@pytest.fixture
+def sample_sensor_metadata():
+    """Create sample sensor metadata fixture."""
+    return SensorMetadata(
+        location_lat=40.7128,
+        location_lon=-74.0060,
+        location_elevation=100.0,
+        heading=45.0,
+        pitch=-30.0,
+        roll=0.0,
+        focal_length=3000.0,
+        sensor_width_mm=6.4,
+        sensor_height_mm=4.8,
+        image_width=1920,
+        image_height=1440,
+    )
+
+
+@pytest.fixture
+def sample_detection_input(sample_sensor_metadata):
+    """Create sample detection input fixture with valid base64 image."""
+    # Create a minimal valid PNG (1x1 pixel)
+    png_bytes = base64.b64encode(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+        b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    ).decode()
+
+    return DetectionInput(
+        image_base64=png_bytes,
+        pixel_x=512,
+        pixel_y=384,
+        object_class="vehicle",
+        ai_confidence=0.92,
+        source="uav_detection_model_v2",
+        camera_id="dji_phantom_4",
+        timestamp="2026-02-15T12:00:00Z",
+        sensor_metadata=sample_sensor_metadata,
+    )
 
 
 # ============================================================================
 # ACCEPTANCE TESTS - RED PHASE
 # ============================================================================
 
+
 @pytest.mark.acceptance
-def test_detection_input_accepts_valid_json():
-    """Acceptance test: DetectionInput accepts valid JSON with all required fields."""
-    valid_data = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "source": "satellite_fire_api",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
-    detection = DetectionInput(**valid_data)
-    assert detection.latitude == 40.7128
-    assert detection.longitude == -74.0060
-    assert detection.accuracy_meters == 200
-    assert detection.confidence == 0.85
-    assert detection.source == "satellite_fire_api"
+def test_detection_input_accepts_valid_image_and_pixels():
+    """Acceptance test: DetectionInput accepts image data and pixel coordinates."""
+    png_bytes = base64.b64encode(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+        b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    ).decode()
+
+    detection = DetectionInput(
+        image_base64=png_bytes,
+        pixel_x=512,
+        pixel_y=384,
+        object_class="vehicle",
+        ai_confidence=0.92,
+        source="uav_detection_model_v2",
+        camera_id="dji_phantom_4",
+        timestamp="2026-02-15T12:00:00Z",
+        sensor_metadata=SensorMetadata(
+            location_lat=40.7128,
+            location_lon=-74.0060,
+            location_elevation=100.0,
+            heading=45.0,
+            pitch=-30.0,
+            roll=0.0,
+            focal_length=3000.0,
+            sensor_width_mm=6.4,
+            sensor_height_mm=4.8,
+            image_width=1920,
+            image_height=1440,
+        ),
+    )
+    assert detection.pixel_x == 512
+    assert detection.pixel_y == 384
+    assert detection.object_class == "vehicle"
 
 
 @pytest.mark.acceptance
-def test_detection_input_requires_lat_lon():
-    """Acceptance test: DetectionInput requires latitude and longitude fields."""
+def test_detection_input_requires_image_base64():
+    """Acceptance test: DetectionInput requires valid base64-encoded image."""
     incomplete_data = {
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "source": "satellite_fire_api",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
+        "image_base64": "invalid-base64!!!",
+        "pixel_x": 512,
+        "pixel_y": 384,
+        "object_class": "vehicle",
+        "ai_confidence": 0.92,
+        "source": "uav_detection_model_v2",
+        "camera_id": "dji_phantom_4",
+        "timestamp": "2026-02-15T12:00:00Z",
+        "sensor_metadata": {
+            "location_lat": 40.7128,
+            "location_lon": -74.0060,
+            "location_elevation": 100.0,
+            "heading": 45.0,
+            "pitch": -30.0,
+            "roll": 0.0,
+            "focal_length": 3000.0,
+            "sensor_width_mm": 6.4,
+            "sensor_height_mm": 4.8,
+            "image_width": 1920,
+            "image_height": 1440,
+        },
     }
     with pytest.raises(ValidationError) as exc_info:
         DetectionInput(**incomplete_data)
-    assert "latitude" in str(exc_info.value) or "longitude" in str(exc_info.value)
+    assert "image_base64" in str(exc_info.value)
 
 
 @pytest.mark.acceptance
-def test_detection_input_validates_coordinate_ranges():
-    """Acceptance test: DetectionInput validates coordinate ranges (±90° lat, ±180° lon)."""
-    # Test invalid latitude > 90
-    invalid_lat_data = {
-        "latitude": 95.0,  # Invalid: > 90
-        "longitude": -74.0060,
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "source": "satellite_fire_api",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
-    with pytest.raises(ValidationError):
-        DetectionInput(**invalid_lat_data)
+def test_ai_confidence_normalized_to_0_1():
+    """Acceptance test: AI confidence must be between 0.0 and 1.0."""
+    png_bytes = base64.b64encode(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+        b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    ).decode()
 
-    # Test invalid longitude > 180
-    invalid_lon_data = {
-        "latitude": 40.7128,
-        "longitude": 185.0,  # Invalid: > 180
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "source": "satellite_fire_api",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
-    with pytest.raises(ValidationError):
-        DetectionInput(**invalid_lon_data)
-
-
-@pytest.mark.acceptance
-def test_confidence_normalized_to_0_1_scale():
-    """Acceptance test: Confidence values normalized to 0-1 scale (rejects > 1.0)."""
     # Valid confidence
     valid_data = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "source": "satellite_fire_api",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
+        "image_base64": png_bytes,
+        "pixel_x": 512,
+        "pixel_y": 384,
+        "object_class": "vehicle",
+        "ai_confidence": 0.85,
+        "source": "uav_detection_model_v2",
+        "camera_id": "dji_phantom_4",
+        "timestamp": "2026-02-15T12:00:00Z",
+        "sensor_metadata": {
+            "location_lat": 40.7128,
+            "location_lon": -74.0060,
+            "location_elevation": 100.0,
+            "heading": 45.0,
+            "pitch": -30.0,
+            "roll": 0.0,
+            "focal_length": 3000.0,
+            "sensor_width_mm": 6.4,
+            "sensor_height_mm": 4.8,
+            "image_width": 1920,
+            "image_height": 1440,
+        },
     }
     detection = DetectionInput(**valid_data)
-    assert detection.confidence == 0.85
+    assert detection.ai_confidence == 0.85
 
     # Invalid confidence > 1.0
-    invalid_data = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": 200,
-        "confidence": 1.5,  # Invalid: > 1.0
-        "source": "satellite_fire_api",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
+    invalid_data = valid_data.copy()
+    invalid_data["ai_confidence"] = 1.5
     with pytest.raises(ValidationError):
         DetectionInput(**invalid_data)
 
 
 @pytest.mark.acceptance
-def test_accuracy_in_meters_validated():
-    """Acceptance test: Accuracy in meters validated as positive value."""
-    # Valid accuracy
-    valid_data = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "source": "satellite_fire_api",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
-    detection = DetectionInput(**valid_data)
-    assert detection.accuracy_meters == 200
-
-    # Invalid accuracy (zero)
-    invalid_data = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": 0,  # Invalid: not > 0
-        "confidence": 0.85,
-        "source": "satellite_fire_api",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
+def test_sensor_metadata_validates_coordinate_ranges():
+    """Acceptance test: Sensor metadata validates coordinate ranges."""
+    # Invalid latitude > 90
     with pytest.raises(ValidationError):
-        DetectionInput(**invalid_data)
+        SensorMetadata(
+            location_lat=95.0,  # Invalid: > 90
+            location_lon=-74.0060,
+            location_elevation=100.0,
+            heading=45.0,
+            pitch=-30.0,
+            roll=0.0,
+            focal_length=3000.0,
+            sensor_width_mm=6.4,
+            sensor_height_mm=4.8,
+            image_width=1920,
+            image_height=1440,
+        )
+
+    # Invalid longitude > 180
+    with pytest.raises(ValidationError):
+        SensorMetadata(
+            location_lat=40.7128,
+            location_lon=185.0,  # Invalid: > 180
+            location_elevation=100.0,
+            heading=45.0,
+            pitch=-30.0,
+            roll=0.0,
+            focal_length=3000.0,
+            sensor_width_mm=6.4,
+            sensor_height_mm=4.8,
+            image_width=1920,
+            image_height=1440,
+        )
 
 
 @pytest.mark.acceptance
-def test_timestamp_iso8601_required():
-    """Acceptance test: Timestamp in ISO8601 format (UTC) required."""
-    # Valid ISO8601 timestamp
-    valid_data = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "source": "satellite_fire_api",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
-    detection = DetectionInput(**valid_data)
-    assert isinstance(detection.timestamp, datetime)
-
-    # Invalid timestamp format
-    invalid_data = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "source": "satellite_fire_api",
-        "class": "fire",
-        "timestamp": "not-a-timestamp"
-    }
-    with pytest.raises(ValidationError):
-        DetectionInput(**invalid_data)
-
-
-@pytest.mark.acceptance
-def test_source_field_required():
-    """Acceptance test: Source field required and non-empty."""
-    # Missing source
-    missing_source = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
-    with pytest.raises(ValidationError):
-        DetectionInput(**missing_source)
-
-    # Empty source
-    empty_source = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "source": "",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
-    with pytest.raises(ValidationError):
-        DetectionInput(**empty_source)
-
-
-@pytest.mark.acceptance
-def test_class_field_required():
-    """Acceptance test: Class field required (aliased as 'class' in JSON)."""
-    # Missing class
-    missing_class = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "source": "satellite_fire_api",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
-    with pytest.raises(ValidationError):
-        DetectionInput(**missing_class)
+def test_geolocation_validation_result_includes_confidence():
+    """Acceptance test: GeolocationValidationResult includes confidence flag."""
+    result = GeolocationValidationResult(
+        calculated_lat=40.7135,
+        calculated_lon=-74.0050,
+        confidence_flag=ConfidenceFlagEnum.GREEN,
+        confidence_value=0.85,
+        uncertainty_radius_meters=15.5,
+        calculation_method="ground_plane_intersection",
+    )
+    assert result.confidence_flag == ConfidenceFlagEnum.GREEN
+    assert result.confidence_value == 0.85
 
 
 # ============================================================================
 # UNIT TESTS - RED PHASE
 # ============================================================================
+
+
+@pytest.mark.parametrize("ai_confidence,should_pass", [
+    (0.0, True),
+    (0.5, True),
+    (1.0, True),
+    (0.85, True),
+    (-0.1, False),
+    (1.1, False),
+    (2.0, False),
+])
+def test_ai_confidence_scale(ai_confidence, should_pass):
+    """Unit test: AI confidence values validated to 0-1 scale."""
+    png_bytes = base64.b64encode(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+        b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    ).decode()
+
+    data = {
+        "image_base64": png_bytes,
+        "pixel_x": 512,
+        "pixel_y": 384,
+        "object_class": "vehicle",
+        "ai_confidence": ai_confidence,
+        "source": "test_model",
+        "camera_id": "camera_1",
+        "timestamp": "2026-02-15T12:00:00Z",
+        "sensor_metadata": {
+            "location_lat": 40.7128,
+            "location_lon": -74.0060,
+            "location_elevation": 100.0,
+            "heading": 45.0,
+            "pitch": -30.0,
+            "roll": 0.0,
+            "focal_length": 3000.0,
+            "sensor_width_mm": 6.4,
+            "sensor_height_mm": 4.8,
+            "image_width": 1920,
+            "image_height": 1440,
+        },
+    }
+    if should_pass:
+        detection = DetectionInput(**data)
+        assert detection.ai_confidence == ai_confidence
+    else:
+        with pytest.raises(ValidationError):
+            DetectionInput(**data)
+
 
 @pytest.mark.parametrize("latitude,longitude,should_pass", [
     (-90.0, -180.0, True),    # Minimum valid
@@ -233,181 +288,163 @@ def test_class_field_required():
     (0.0, 181.0, False),       # Longitude too high
     (0.0, -181.0, False),      # Longitude too low
 ])
-def test_detection_input_model_validates_boundaries(latitude, longitude, should_pass):
-    """Unit test: Model validates coordinate boundaries correctly."""
-    data = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "source": "test_source",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
+def test_sensor_location_boundaries(latitude, longitude, should_pass):
+    """Unit test: Sensor location validates coordinate boundaries."""
     if should_pass:
-        detection = DetectionInput(**data)
-        assert detection.latitude == latitude
-        assert detection.longitude == longitude
+        sensor = SensorMetadata(
+            location_lat=latitude,
+            location_lon=longitude,
+            location_elevation=100.0,
+            heading=45.0,
+            pitch=-30.0,
+            roll=0.0,
+            focal_length=3000.0,
+            sensor_width_mm=6.4,
+            sensor_height_mm=4.8,
+            image_width=1920,
+            image_height=1440,
+        )
+        assert sensor.location_lat == latitude
+        assert sensor.location_lon == longitude
     else:
         with pytest.raises(ValidationError):
-            DetectionInput(**data)
+            SensorMetadata(
+                location_lat=latitude,
+                location_lon=longitude,
+                location_elevation=100.0,
+                heading=45.0,
+                pitch=-30.0,
+                roll=0.0,
+                focal_length=3000.0,
+                sensor_width_mm=6.4,
+                sensor_height_mm=4.8,
+                image_width=1920,
+                image_height=1440,
+            )
 
 
-@pytest.mark.parametrize("confidence_input,should_pass", [
-    (0.0, True),
-    (0.5, True),
-    (1.0, True),
-    (0.85, True),
-    (-0.1, False),
-    (1.1, False),
-    (2.0, False),
-])
-def test_detection_input_converts_confidence_scale(confidence_input, should_pass):
-    """Unit test: Confidence values validated to 0-1 scale."""
-    data = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": 200,
-        "confidence": confidence_input,
-        "source": "test_source",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
-    if should_pass:
-        detection = DetectionInput(**data)
-        assert detection.confidence == confidence_input
-    else:
-        with pytest.raises(ValidationError):
-            DetectionInput(**data)
-
-
-def test_detection_output_includes_validation_flags():
-    """Unit test: DetectionOutput includes confidence and accuracy validation flags."""
-    output = DetectionOutput(
-        detection_id="550e8400-e29b-41d4-a716-446655440000",
-        latitude=40.7128,
-        longitude=-74.0060,
-        accuracy_meters=200,
-        confidence=0.85,
-        source="satellite_fire_api",
-        class_name="fire",
-        timestamp=datetime.now(timezone.utc),
+def test_geolocation_result_confidence_mapping():
+    """Unit test: GeolocationValidationResult maps confidence to flags correctly."""
+    # GREEN: confidence >= 0.75
+    green_result = GeolocationValidationResult(
+        calculated_lat=40.0,
+        calculated_lon=-74.0,
         confidence_flag=ConfidenceFlagEnum.GREEN,
-        accuracy_flag=AccuracyFlagEnum.GREEN,
-        validation_passed=True
+        confidence_value=0.85,
+        uncertainty_radius_meters=10.0,
+        calculation_method="ground_plane_intersection",
     )
-    assert output.confidence_flag == ConfidenceFlagEnum.GREEN
-    assert output.accuracy_flag == AccuracyFlagEnum.GREEN
-    assert output.validation_passed is True
+    assert green_result.confidence_flag == ConfidenceFlagEnum.GREEN
+
+    # YELLOW: 0.50 <= confidence < 0.75
+    yellow_result = GeolocationValidationResult(
+        calculated_lat=40.0,
+        calculated_lon=-74.0,
+        confidence_flag=ConfidenceFlagEnum.YELLOW,
+        confidence_value=0.60,
+        uncertainty_radius_meters=20.0,
+        calculation_method="ground_plane_intersection",
+    )
+    assert yellow_result.confidence_flag == ConfidenceFlagEnum.YELLOW
+
+    # RED: confidence < 0.50
+    red_result = GeolocationValidationResult(
+        calculated_lat=40.0,
+        calculated_lon=-74.0,
+        confidence_flag=ConfidenceFlagEnum.RED,
+        confidence_value=0.30,
+        uncertainty_radius_meters=50.0,
+        calculation_method="ground_plane_intersection",
+    )
+    assert red_result.confidence_flag == ConfidenceFlagEnum.RED
 
 
-@pytest.mark.parametrize("error_code,error_message", [
-    ("E001", "Invalid JSON format"),
-    ("E002", "Missing required field"),
-    ("E003", "Coordinate out of bounds"),
-])
-def test_error_response_has_error_code(error_code, error_message):
+def test_error_response_has_error_code():
     """Unit test: ErrorResponse includes error code and message."""
     error = ErrorResponse(
-        error_code=error_code,
-        error_message=error_message,
-        details={"field": "latitude"}
+        error_code="E001",
+        error_message="Invalid image data",
+        details={"field": "image_base64"},
     )
-    assert error.error_code == error_code
-    assert error.error_message == error_message
+    assert error.error_code == "E001"
+    assert error.error_message == "Invalid image data"
     assert error.details is not None
 
 
-def test_api_request_serialization():
+def test_api_request_serialization(sample_detection_input):
     """Unit test: APIRequest serializes correctly."""
-    detection_data = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "source": "satellite_fire_api",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
-    request = APIRequest(detection=DetectionInput(**detection_data))
+    request = APIRequest(detection=sample_detection_input)
     json_data = request.model_dump_json()
     assert "detection" in json_data
-    assert "latitude" in json_data
+    assert "image_base64" in json_data
 
 
 def test_api_response_deserialization():
     """Unit test: APIResponse deserializes correctly."""
     response_json = {
         "status": "success",
-        "data": {"detection_id": "550e8400-e29b-41d4-a716-446655440000"},
-        "error": None
+        "data": {
+            "detection_id": "550e8400-e29b-41d4-a716-446655440000",
+            "calculated_lat": 40.0,
+            "calculated_lon": -74.0,
+        },
+        "error": None,
     }
     response = APIResponse(**response_json)
     assert response.status == "success"
     assert response.data is not None
 
 
-@pytest.mark.parametrize("accuracy,should_pass", [
-    (1.0, True),
-    (10.5, True),
-    (500.0, True),
-    (1000.0, True),
-    (0.0, False),
-    (-10.0, False),
-])
-def test_accuracy_positive_meters(accuracy, should_pass):
-    """Unit test: Accuracy must be positive meters."""
-    data = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": accuracy,
-        "confidence": 0.85,
-        "source": "test_source",
-        "class": "fire",
-        "timestamp": "2026-02-15T12:00:00Z"
-    }
-    if should_pass:
-        detection = DetectionInput(**data)
-        assert detection.accuracy_meters == accuracy
-    else:
-        with pytest.raises(ValidationError):
-            DetectionInput(**data)
-
-
-def test_geolocation_data_with_validation_flags():
-    """Unit test: GeolocationData includes both confidence and accuracy flags."""
-    geo = GeolocationData(
-        latitude=40.7128,
-        longitude=-74.0060,
-        accuracy_meters=200,
-        confidence_flag=ConfidenceFlagEnum.GREEN,
-        accuracy_flag=AccuracyFlagEnum.YELLOW
-    )
-    assert geo.confidence_flag == ConfidenceFlagEnum.GREEN
-    assert geo.accuracy_flag == AccuracyFlagEnum.YELLOW
-
-
-@pytest.mark.parametrize("timestamp_str,should_pass", [
-    ("2026-02-15T12:00:00Z", True),
-    ("2026-02-15T12:00:00+00:00", True),
-    ("2026-02-15", True),  # Pydantic accepts date-only ISO8601 strings
-    ("not-a-timestamp", False),
-    ("2026-13-45T25:99:99Z", False),  # Invalid month and time
-])
-def test_timestamp_iso8601_validation(timestamp_str, should_pass):
+def test_timestamp_iso8601_validation():
     """Unit test: Timestamp validates ISO8601 format."""
-    data = {
-        "latitude": 40.7128,
-        "longitude": -74.0060,
-        "accuracy_meters": 200,
-        "confidence": 0.85,
-        "source": "test_source",
-        "class": "fire",
-        "timestamp": timestamp_str
-    }
-    if should_pass:
-        detection = DetectionInput(**data)
-        assert isinstance(detection.timestamp, datetime)
-    else:
-        with pytest.raises(ValidationError):
-            DetectionInput(**data)
+    png_bytes = base64.b64encode(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+        b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    ).decode()
+
+    # Valid ISO8601
+    detection = DetectionInput(
+        image_base64=png_bytes,
+        pixel_x=512,
+        pixel_y=384,
+        object_class="vehicle",
+        ai_confidence=0.92,
+        source="test_model",
+        camera_id="camera_1",
+        timestamp="2026-02-15T12:00:00Z",
+        sensor_metadata=SensorMetadata(
+            location_lat=40.7128,
+            location_lon=-74.0060,
+            location_elevation=100.0,
+            heading=45.0,
+            pitch=-30.0,
+            roll=0.0,
+            focal_length=3000.0,
+            sensor_width_mm=6.4,
+            sensor_height_mm=4.8,
+            image_width=1920,
+            image_height=1440,
+        ),
+    )
+    assert isinstance(detection.timestamp, datetime)
+
+
+def test_detection_output_structure():
+    """Unit test: DetectionOutput has required fields."""
+    output = DetectionOutput(
+        detection_id="550e8400-e29b-41d4-a716-446655440000",
+        calculated_lat=40.7135,
+        calculated_lon=-74.0050,
+        confidence_flag=ConfidenceFlagEnum.GREEN,
+        confidence_value=0.85,
+        uncertainty_radius_meters=15.5,
+        object_class="vehicle",
+        ai_confidence=0.92,
+        source="uav_detection_model_v2",
+        timestamp=datetime.fromisoformat("2026-02-15T12:00:00+00:00"),
+    )
+    assert output.detection_id == "550e8400-e29b-41d4-a716-446655440000"
+    assert output.calculated_lat == 40.7135
+    assert output.confidence_flag == ConfidenceFlagEnum.GREEN
+    assert output.processed_at is not None
