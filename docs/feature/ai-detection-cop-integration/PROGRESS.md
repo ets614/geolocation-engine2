@@ -24,15 +24,19 @@ PHASE 03: Offline-First           ███████████████�
 ├─ 03-03: Connectivity Monitoring ✅ (2 tests)
 └─ 03-04: Error Handling          ✅ (3 tests)
 
-PHASE 04: Quality Assurance       ░░░░░░░░░░░░░░░░░░░░   0% ⏭ PENDING
-├─ 04-01: Authentication (JWT)
-├─ 04-02: Rate Limiting
-└─ 04-03: Load Testing
+PHASE 04: Security & Performance  ████░░░░░░░░░░░░░░░░  20% 🚀 WAVE 01: DESIGN
+├─ Wave 01: DESIGN (Alex Chen)         ⏭ READY
+├─ Wave 02: DISTILL (Maya Patel)       ⏭ PENDING
+├─ Wave 03: DELIVER (Jordan Lee)       ⏭ PENDING (6 issues)
+├─ Wave 04: DEVOP (Sam Rodriguez)      ⏭ PENDING
+└─ Wave 05: FINALIZE (Casey Kim)       ⏭ PENDING
 
-PHASE 05: Production Ready        ░░░░░░░░░░░░░░░░░░░░   0% ⏭ PENDING
-├─ 05-01: Kubernetes Manifests
-├─ 05-02: Monitoring/Alerting
-└─ 05-03: Performance Tuning
+PHASE 05: Production Deployment   ░░░░░░░░░░░░░░░░░░░░   0% 🚀 WAVE 01: DESIGN
+├─ Wave 01: DESIGN (Alex Chen)         ⏭ READY
+├─ Wave 02: DISTILL (Maya Patel)       ⏭ PENDING
+├─ Wave 03: DELIVER (Jordan Lee & Sam) ⏭ PENDING (2 issues)
+├─ Wave 04: DEVOP (Sam Rodriguez)      ⏭ PENDING
+└─ Wave 05: FINALIZE (Casey Kim)       ⏭ PENDING
 ```
 
 ## 📊 Test Coverage
@@ -140,58 +144,105 @@ Code Quality:   [█████████████████████
 - Error handling and rollback logic
 - Async connectivity monitoring
 
-## 🚀 Automation System Ready (NEW)
+## 👥 nwave Agent Team (Human Names + Skills)
 
 ```
-GitHub Issue → Agent Routing → Discord Alert → Agent Execution → PR Review → Merge
-  (5 sec)        (immediate)    (2 seconds)    (5-min cron)      (mobile)    (done)
+╔════════════════════════════════════════════════════════════════════════════╗
+║                          nwave AGENT TEAM ROSTER                           ║
+╠═══════════════╦════════════════════╦══════════════╦════════════════════════╣
+║ Agent Name    ║ Role               ║ nwave Skill  ║ Responsibilities       ║
+╠═══════════════╬════════════════════╬══════════════╬════════════════════════╣
+║ 👤 Alex Chen  ║ Solution Architect ║ nw:design    ║ Architecture design    ║
+║               ║                    ║              ║ Tech selection, ADRs   ║
+╠═══════════════╬════════════════════╬══════════════╬════════════════════════╣
+║ 👤 Maya Patel ║ Test Engineer      ║ nw:distill   ║ Acceptance tests (BDD) ║
+║               ║                    ║              ║ Load testing, validation║
+╠═══════════════╬════════════════════╬══════════════╬════════════════════════╣
+║ 👤 Jordan Lee ║ Software Crafter   ║ nw:deliver   ║ Feature implementation ║
+║               ║                    ║              ║ Outside-in TDD, refactor║
+╠═══════════════╬════════════════════╬══════════════╬════════════════════════╣
+║ 👤 Sam        ║ Platform Engineer  ║ nw:devops    ║ K8s deployment, infra  ║
+║   Rodriguez   ║                    ║              ║ Monitoring, production ║
+╠═══════════════╬════════════════════╬══════════════╬════════════════════════╣
+║ 👤 Riley      ║ Troubleshooter     ║ nw:root-why  ║ Root cause analysis    ║
+║   Taylor      ║                    ║              ║ Debugging, tracing     ║
+╠═══════════════╬════════════════════╬══════════════╬════════════════════════╣
+║ 👤 Casey Kim  ║ Docs Specialist    ║ nw:document  ║ Technical docs (DIVIO) ║
+║               ║                    ║              ║ Tutorials, guides      ║
+╚═══════════════╩════════════════════╩══════════════╩════════════════════════╝
 ```
 
-### Issue-Driven Development Enabled ✨
+## 🚀 nwave Wave-Based Development
+
+```
+GitHub Issue → Wave Routing → Agent Assignment → Execution → PR Review → Merge
+(label:wave:*)    (nwave skill)   (human name)    (5 min)     (mobile)    (done)
+```
+
+### Wave-Driven Workflow ✨
 
 **How it works:**
-1. Create GitHub issue with label (`phase-04`, `phase-05`, `research`)
-2. Workflow routes to appropriate agent (nw:deliver, nw:devops, nw:research)
-3. Discord notification sent immediately
+1. Create GitHub issue with wave label (`wave:design`, `wave:deliver`, `wave:devops`, etc.)
+2. Workflow routes to nwave skill + assigns human agent
+3. Agent name and skill posted on issue immediately
 4. Agent executes every 5 minutes (scheduled cron)
 5. PR created automatically with implementation
 6. Discord alerts you when ready for review
 7. Review & approve via GitHub mobile + Discord
 
 **Workflows Active:**
-- ✅ `.github/workflows/issue-to-pr.yml` - Issue routing & job tracking
+- ✅ `.github/workflows/issue-to-pr.yml` - Wave routing & job tracking
 - ✅ `.github/workflows/discord-notifications.yml` - Real-time Discord alerts
 - ✅ `.github/workflows/process-issues-scheduled.yml` - 5-min cron job processor
 
 **Testing Completed:**
-- ✅ Issue routing fires immediately
-- ✅ Agent comments posted on issues
+- ✅ Wave label routing works correctly
+- ✅ Agent names assigned per wave
+- ✅ nwave skills invoked from workflows
 - ✅ Discord webhook operational
-- ✅ Job marker files created
+- ✅ Job marker files created with skill + agent_name
 - ✅ Notifications received in Discord
 
 ---
 
-## 📋 Next Steps (Phase 04-05)
+## 📋 How to Use the nwave Agent Team
 
-**Create issues to trigger work:**
+### Create Issues by Wave
+
+**Phase 04 - Wave 01: DESIGN** (Alex Chen)
 ```
-Title: [Phase 04] Add JWT authentication
-Labels: phase-04
-
-Title: [Phase 04] Implement rate limiting
-Labels: phase-04
-
-Title: [Phase 04] Load testing framework
-Labels: phase-04
+Title: [Phase 04 - DESIGN] Design security & performance architecture
+Labels: phase-04, wave:design, agent:alex-chen
+Body: Architecture decisions for JWT, rate limiting, caching...
 ```
 
-The agent will automatically execute and submit PRs for review.
+**Phase 04 - Wave 03: DELIVER** (Jordan Lee)
+```
+Title: [Phase 04 - DELIVER] Implement JWT authentication
+Labels: phase-04, wave:deliver, agent:jordan-lee
+Body: Implement JWT auth with tests and security hardening...
+```
+
+**Phase 05 - Wave 04: DEVOP** (Sam Rodriguez)
+```
+Title: [Phase 05 - DEVOP] Deploy Kubernetes infrastructure
+Labels: phase-05, wave:devops, agent:sam-rodriguez
+Body: K8s manifests, Helm charts, production deployment...
+```
+
+**Any Wave** - Generic format:
+```
+Title: [Phase XX - WAVE] Issue description
+Labels: phase-04, wave:WAVE_NAME, agent:AGENT_NAME
+```
+
+The agent will automatically execute, create a PR with implementation, and notify you in Discord when ready for review.
 
 ---
 
 **Last Updated:** 2026-02-15
-**Status:** Feature Complete + Automation Ready ✅✨
+**Status:** Phase 01-03 Complete ✅ | Phase 04-05 Wave Structure Ready 🚀
 **Tests:** 124/124 Passing ✅
-**Ready for:** Issue-Driven Phase 04-05 Development
+**Agent Team:** 6 agents + nwave skills ✨
+**Next:** Create Phase 04 DESIGN issue to start (Alex Chen)
 **Method:** GitHub Mobile + Discord Mobile

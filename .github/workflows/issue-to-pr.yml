@@ -48,21 +48,48 @@ jobs:
           LABELS: ${{ steps.issue.outputs.labels }}
           TITLE: ${{ steps.issue.outputs.title }}
         run: |
-          AGENT="nw:deliver"
+          SKILL="nw:deliver"
+          AGENT_NAME="jordan-lee"
 
-          if echo "$LABELS" | grep -q '"phase-04"'; then
-            AGENT="nw:deliver"
+          # Route based on wave label (nwave methodology)
+          if echo "$LABELS" | grep -q '"wave:design"'; then
+            SKILL="nw:design"
+            AGENT_NAME="alex-chen"
+          elif echo "$LABELS" | grep -q '"wave:distill"'; then
+            SKILL="nw:distill"
+            AGENT_NAME="maya-patel"
+          elif echo "$LABELS" | grep -q '"wave:deliver"'; then
+            SKILL="nw:deliver"
+            AGENT_NAME="jordan-lee"
+          elif echo "$LABELS" | grep -q '"wave:devops"'; then
+            SKILL="nw:devops"
+            AGENT_NAME="sam-rodriguez"
+          elif echo "$LABELS" | grep -q '"wave:support"'; then
+            SKILL="nw:root-why"
+            AGENT_NAME="riley-taylor"
+          elif echo "$LABELS" | grep -q '"wave:finalize"'; then
+            SKILL="nw:finalize"
+            AGENT_NAME="casey-kim"
+          # Fallback to legacy phase labels
+          elif echo "$LABELS" | grep -q '"phase-04"'; then
+            SKILL="nw:deliver"
+            AGENT_NAME="jordan-lee"
           elif echo "$LABELS" | grep -q '"phase-05"'; then
-            AGENT="nw:devops"
+            SKILL="nw:devops"
+            AGENT_NAME="sam-rodriguez"
           elif echo "$LABELS" | grep -q '"research"'; then
-            AGENT="nw:research"
+            SKILL="nw:research"
+            AGENT_NAME="research-team"
           elif echo "$LABELS" | grep -q '"design"'; then
-            AGENT="nw:design"
+            SKILL="nw:design"
+            AGENT_NAME="alex-chen"
           elif echo "$LABELS" | grep -q '"bug"'; then
-            AGENT="nw:troubleshooter"
+            SKILL="nw:root-why"
+            AGENT_NAME="riley-taylor"
           fi
 
-          echo "agent=$AGENT" >> $GITHUB_OUTPUT
+          echo "skill=$SKILL" >> $GITHUB_OUTPUT
+          echo "agent=$AGENT_NAME" >> $GITHUB_OUTPUT
           echo "title=$TITLE" >> $GITHUB_OUTPUT
 
       - name: Create job marker file
@@ -72,7 +99,8 @@ jobs:
           cat > ".nwave/jobs/issue-${{ steps.issue.outputs.number }}.json" << EOF
           {
             "issue_number": ${{ steps.issue.outputs.number }},
-            "agent": "${{ steps.determine.outputs.agent }}",
+            "skill": "${{ steps.determine.outputs.skill }}",
+            "agent_name": "${{ steps.determine.outputs.agent }}",
             "status": "pending",
             "created_at": "$CREATED_AT"
           }
@@ -100,8 +128,9 @@ jobs:
         with:
           script: |
             const issueNumber = context.payload.issue?.number || context.inputs.issue_number;
-            const agent = "${{ needs.route-issue.outputs.agent-type }}";
-            const body = `🤖 **Agent Routing**: \`${agent}\`\n\nThis issue has been routed to **${agent}** for execution.\n\n📝 **Next Steps:**\nThe agent will process this issue and create a PR with the implementation.\n\n👀 Watch for the PR creation notification.`;
+            const skill = "${{ needs.route-issue.outputs.agent-type }}".split(':')[1] || "${{ needs.route-issue.outputs.agent-type }}";
+            const agentName = "${{ needs.route-issue.outputs.agent-type }}";
+            const body = `🤖 **Agent Assignment**: ${agentName}\n\nThis issue has been routed to **${agentName}** for execution.\n\n**Skill**: \`nw:${skill}\`\n\n📝 **Next Steps:**\nThe agent will process this issue within 5 minutes and create a PR with the implementation.\n\n👀 Watch for the PR creation notification in Discord.`;
 
             github.rest.issues.createComment({
               owner: context.repo.owner,

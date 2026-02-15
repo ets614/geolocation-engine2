@@ -49,7 +49,9 @@ jobs:
           if pending_jobs:
             print(f"Found {len(pending_jobs)} pending jobs")
             for job in pending_jobs:
-              print(f"  - Issue #{job['issue_number']}: {job['agent']}")
+              agent_name = job.get('agent_name', job.get('agent', 'unknown'))
+              skill = job.get('skill', 'unknown')
+              print(f"  - Issue #{job['issue_number']}: {agent_name} ({skill})")
 
             with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
               f.write(f"count={len(pending_jobs)}\n")
@@ -63,6 +65,7 @@ jobs:
         run: |
           import json
           import os
+          from datetime import datetime
           from pathlib import Path
 
           jobs = json.loads('${{ steps.pending.outputs.jobs }}'.replace("'", '"'))
@@ -70,6 +73,7 @@ jobs:
           for job in jobs:
             job_file = Path(f".nwave/jobs/issue-{job['issue_number']}.json")
             job['status'] = 'processing'
+            job['started_at'] = datetime.utcnow().isoformat() + 'Z'
             with open(job_file, 'w') as f:
               json.dump(job, f, indent=2)
 
@@ -81,71 +85,46 @@ jobs:
           os.system('git push || true')
         shell: python3 {0}
 
-      - name: Process Phase 04 tasks
+      - name: Process agent tasks
         if: steps.pending.outputs.count > 0
         uses: actions/github-script@v7
         with:
           script: |
             const jobs = JSON.parse('${{ steps.pending.outputs.jobs }}'.replace(/'/g, '"'));
-            const phase04Jobs = jobs.filter(j => j.agent === 'nw:deliver');
 
-            if (phase04Jobs.length === 0) return;
+            console.log(`Processing ${jobs.length} total agent tasks...`);
 
-            console.log(`Processing ${phase04Jobs.length} Phase 04 tasks...`);
+            for (const job of jobs) {
+              const agentName = job.agent_name || job.agent || 'unknown';
+              const skill = job.skill || 'unknown';
 
-            for (const job of phase04Jobs) {
-              console.log(`Executing nw:deliver for issue #${job.issue_number}`);
-              // Agent execution would happen here
-              // For now, log the job details
+              console.log(`Executing ${skill} for issue #${job.issue_number} (Agent: ${agentName})`);
+
+              // Generate skill-specific message
+              let skillMessage = '';
+              if (skill === 'nw:design') {
+                skillMessage = `👤 **${agentName}** is designing the architecture...`;
+              } else if (skill === 'nw:distill') {
+                skillMessage = `✅ **${agentName}** is creating acceptance tests...`;
+              } else if (skill === 'nw:deliver') {
+                skillMessage = `💻 **${agentName}** is implementing the feature...`;
+              } else if (skill === 'nw:devops') {
+                skillMessage = `🚀 **${agentName}** is setting up infrastructure...`;
+              } else if (skill === 'nw:root-why') {
+                skillMessage = `🔍 **${agentName}** is analyzing the issue...`;
+              } else if (skill === 'nw:finalize') {
+                skillMessage = `📚 **${agentName}** is documenting the work...`;
+              } else if (skill === 'nw:research') {
+                skillMessage = `🔬 **${agentName}** is researching the topic...`;
+              } else {
+                skillMessage = `🤖 **${agentName}** is processing...`;
+              }
+
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: job.issue_number,
-                body: `🤖 **Agent Processing Started**: \`nw:deliver\`\n\nThe agent is now executing the work...\n\n⏳ Expected PR creation in ~2-5 minutes\n\nCheck workflow runs for progress: ${context.server_url}/${context.repo.owner}/${context.repo.repo}/actions`
-              });
-            }
-
-      - name: Process Phase 05 tasks
-        if: steps.pending.outputs.count > 0
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const jobs = JSON.parse('${{ steps.pending.outputs.jobs }}'.replace(/'/g, '"'));
-            const phase05Jobs = jobs.filter(j => j.agent === 'nw:devops');
-
-            if (phase05Jobs.length === 0) return;
-
-            console.log(`Processing ${phase05Jobs.length} Phase 05 tasks...`);
-
-            for (const job of phase05Jobs) {
-              console.log(`Executing nw:devops for issue #${job.issue_number}`);
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: job.issue_number,
-                body: `🤖 **Agent Processing Started**: \`nw:devops\`\n\nThe platform architect agent is designing the infrastructure...\n\n⏳ Expected PR creation in ~3-5 minutes`
-              });
-            }
-
-      - name: Process Research tasks
-        if: steps.pending.outputs.count > 0
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const jobs = JSON.parse('${{ steps.pending.outputs.jobs }}'.replace(/'/g, '"'));
-            const researchJobs = jobs.filter(j => j.agent === 'nw:research');
-
-            if (researchJobs.length === 0) return;
-
-            console.log(`Processing ${researchJobs.length} research tasks...`);
-
-            for (const job of researchJobs) {
-              console.log(`Executing nw:research for issue #${job.issue_number}`);
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: job.issue_number,
-                body: `🤖 **Agent Processing Started**: \`nw:research\`\n\nThe researcher is investigating the topic...\n\n⏳ Expected PR with findings in ~2-3 minutes`
+                body: `🤖 **Agent Processing Started**\n\n${skillMessage}\n\nSkill: \`${skill}\`\n\n⏳ Expected PR creation in ~2-5 minutes\n\n🔗 [View Workflow Runs](${context.server_url}/${context.repo.owner}/${context.repo.repo}/actions)`
               });
             }
 
