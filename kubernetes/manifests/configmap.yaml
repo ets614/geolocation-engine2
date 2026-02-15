@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: geolocation-config
+data:
+  LOG_LEVEL: "INFO"
+  ENVIRONMENT: "production"
