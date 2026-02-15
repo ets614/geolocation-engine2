@@ -1,14 +1,74 @@
 """API routes for detection ingestion with CoT/TAK output."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response, JSONResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from src.models.schemas import DetectionInput, ErrorResponse
 from src.services.detection_service import DetectionService
 from src.services.cot_service import CotService
+from src.services.jwt_service import JWTService
 from src.database import get_db_session
 from src.config import get_config
+from src.api.auth import verify_jwt_token
 
 router = APIRouter(prefix="/api/v1", tags=["detections"])
+
+
+class TokenRequest(BaseModel):
+    """Request model for token generation."""
+    client_id: str
+    expires_in_minutes: int = 60
+
+
+class TokenResponse(BaseModel):
+    """Response model for token endpoint."""
+    access_token: str
+    token_type: str = "Bearer"
+    expires_in: int
+
+
+@router.post(
+    "/auth/token",
+    status_code=status.HTTP_201_CREATED,
+    response_model=TokenResponse,
+    responses={
+        400: {"description": "Invalid client_id"}
+    }
+)
+async def get_auth_token(request: TokenRequest):
+    """Generate JWT authentication token.
+
+    Args:
+        request: Token request with client_id and optional expiration
+
+    Returns:
+        TokenResponse: JWT access token
+
+    Raises:
+        HTTPException: 400 if client_id is missing
+    """
+    if not request.client_id or not request.client_id.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="client_id is required"
+        )
+
+    config = get_config()
+    jwt_service = JWTService(
+        secret_key=config.jwt_secret_key,
+        algorithm=config.jwt_algorithm
+    )
+
+    token = jwt_service.generate_token(
+        subject=request.client_id,
+        expires_in_minutes=request.expires_in_minutes
+    )
+
+    return TokenResponse(
+        access_token=token,
+        token_type="Bearer",
+        expires_in=request.expires_in_minutes * 60
+    )
 
 
 @router.post(
@@ -20,7 +80,8 @@ router = APIRouter(prefix="/api/v1", tags=["detections"])
 )
 async def create_detection(
     detection: DetectionInput,
-    session: Session = Depends(get_db_session)
+    session: Session = Depends(get_db_session),
+    client_id: str = Depends(verify_jwt_token)
 ):
     """Accept detection data and return CoT/TAK format.
 
