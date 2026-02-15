@@ -1,0 +1,599 @@
+# AI Detection to COP Translation System: Data Journey Schema
+# Walking Skeleton Architecture with Emotional Milestones
+# Evidence: 5 customer interviews across 5 segments
+
+system_name: "AI Detection to COP Translation System"
+system_type: "Backend Data Pipeline"
+journey_type: "Data Flow & Operator Experience"
+version: "1.0.0-walking-skeleton"
+date_created: "2026-02-17"
+evidence_base: "Discovery Phase (G1-G4 complete)"
+
+# ============================================================================
+# JOURNEY PHASES
+# ============================================================================
+
+phases:
+  - phase_id: "INSTALL"
+    name: "Installation & Validation"
+    duration_minutes: 5
+    actor: "Systems Integration Engineer"
+    emotional_arc:
+      start: "Cautious"
+      end: "Confident"
+    steps:
+      - step_id: "I1"
+        name: "Deploy System"
+        action: "Run docker container with API token"
+        input: "Docker image, environment variables"
+        output: "Service running on localhost:8080"
+        success_criteria: "Container health check: OK"
+        time_budget_seconds: 30
+        confidence: "HIGH"
+        evidence: "Interview 3 confirmed containerization reduces deployment friction"
+
+      - step_id: "I2"
+        name: "Verify Installation"
+        action: "Call health endpoint"
+        input: "HTTP GET /health"
+        output: "JSON status response"
+        success_criteria: "HTTP 200, version matches"
+        time_budget_seconds: 5
+        confidence: "HIGH"
+        evidence: "Self-service validation eliminates ambiguity"
+
+  - phase_id: "CONFIG"
+    name: "Configuration & Source Registration"
+    duration_minutes: 10
+    actor: "Systems Integration Engineer"
+    emotional_arc:
+      start: "Uncertain"
+      end: "Confident"
+    steps:
+      - step_id: "C1"
+        name: "Register Detection Source"
+        action: "Create new detection source via UI"
+        input: "Source template (auto-detected)"
+        output: "Source configuration object"
+        success_criteria: "Source appears in UI, API reachable"
+        time_budget_seconds: 120
+        confidence: "MEDIUM-HIGH"
+        evidence: "Interview 3: 'Configuration should be 10 minutes, not a week'"
+
+      - step_id: "C2"
+        name: "Test API Connection"
+        action: "Send test request to detection API"
+        input: "API endpoint, authentication"
+        output: "Sample detection payload"
+        success_criteria: "HTTP 200, valid JSON returned in <2s"
+        time_budget_seconds: 30
+        confidence: "HIGH"
+        evidence: "Live test removes guesswork"
+
+      - step_id: "C3"
+        name: "Configure Output Parameters"
+        action: "Set accuracy thresholds, confidence levels"
+        input: "Threshold values"
+        output: "Configuration saved"
+        success_criteria: "Parameters accepted without validation error"
+        time_budget_seconds: 60
+        confidence: "HIGH"
+        evidence: "Sensible defaults reduce cognitive load"
+
+  - phase_id: "VALIDATE"
+    name: "Validation & Dry-Run"
+    duration_minutes: 15
+    actor: "Systems Integration Engineer + Operations Manager"
+    emotional_arc:
+      start: "Skeptical"
+      end: "Validated"
+    steps:
+      - step_id: "V1"
+        name: "Fetch Test Data"
+        action: "Request sample detections from API"
+        input: "Source configuration"
+        output: "List of recent detections"
+        success_criteria: "3+ recent detections returned"
+        time_budget_seconds: 30
+        confidence: "HIGH"
+        evidence: "Real data inspection builds confidence"
+
+      - step_id: "V2"
+        name: "Simulate Transformation"
+        action: "Transform sample detection through pipeline"
+        input: "Test detection payload"
+        output: "GeoJSON feature (preview)"
+        success_criteria: "GeoJSON valid, accuracy flags present"
+        time_budget_seconds: 60
+        confidence: "HIGH"
+        evidence: "Preview shows exactly what ops will see"
+
+      - step_id: "V3"
+        name: "Operator Review"
+        action: "Operations manager validates output accuracy"
+        input: "GeoJSON preview + map display"
+        output: "Operator approval / rejection"
+        success_criteria: "Operator confirms 'location correct' and 'flags make sense'"
+        time_budget_seconds: 300
+        confidence: "HIGH"
+        evidence: "Interview 3: 'We need to verify with actual ops team first'"
+
+  - phase_id: "DEPLOY"
+    name: "Deployment to Live Feed"
+    duration_minutes: 5
+    actor: "Systems Integration Engineer"
+    emotional_arc:
+      start: "Ready"
+      end: "Relieved"
+    steps:
+      - step_id: "D1"
+        name: "Enable Live Detection Feed"
+        action: "Start polling detection API"
+        input: "Configuration object"
+        output: "Polling active"
+        success_criteria: "Status dashboard shows 'ACTIVE', detections flowing"
+        time_budget_seconds: 10
+        confidence: "HIGH"
+        evidence: "Single click to go live, clear feedback"
+
+      - step_id: "D2"
+        name: "Monitor Status Dashboard"
+        action: "Watch detection flow for 5 minutes"
+        input: "Live detection stream"
+        output: "Status metrics (detections/min, latency, error rate)"
+        success_criteria: "Error rate=0%, latency<2s, detections flowing"
+        time_budget_seconds: 300
+        confidence: "MEDIUM-HIGH"
+        evidence: "Real-time monitoring replaces manual observation"
+
+  - phase_id: "OPERATION"
+    name: "Operational Observation (Dispatcher Workflow)"
+    duration_minutes: 30
+    actor: "Emergency Services Dispatcher"
+    emotional_arc:
+      start: "Curious"
+      end: "Engaged"
+    steps:
+      - step_id: "O1"
+        name: "Observe New Detection on COP"
+        action: "Detection appears on TAK/CAD map"
+        input: "Detection from API → transformed → delivered"
+        output: "Visual marker on map, confidence badge, source label"
+        success_criteria: "Detection visible within 2 seconds of API response"
+        time_budget_seconds: 2000
+        confidence: "HIGH"
+        evidence: "Interview 1: '<2 second latency required for tactical ops'"
+
+      - step_id: "O2"
+        name: "Review Detection Details"
+        action: "Dispatcher clicks detection, views full properties"
+        input: "Detection ID"
+        output: "Detail panel with source, timestamp, accuracy, confidence"
+        success_criteria: "All relevant metadata visible, no information loss"
+        time_budget_seconds: 30
+        confidence: "HIGH"
+        evidence: "Interview 5: 'Need to know provenance and accuracy of every detection'"
+
+      - step_id: "O3"
+        name: "Optional: Verify Accuracy Manually"
+        action: "If flagged YELLOW, dispatcher spot-checks location"
+        input: "Flagged detection"
+        output: "Operator override or confirmation"
+        success_criteria: "<5 minutes total verification time per flagged detection"
+        time_budget_seconds: 300
+        confidence: "HIGH"
+        evidence: "Interview 1: '80% time savings if system auto-checks accuracy'"
+
+      - step_id: "O4"
+        name: "Take Action"
+        action: "Dispatcher dispatches resources or alerts team"
+        input: "Detection + operator decision"
+        output: "Dispatch logged, system records action"
+        success_criteria: "Action recorded in audit trail"
+        time_budget_seconds: 0  # Varies by ops procedure
+        confidence: "N/A"
+        evidence: "Interview 1: 'Need audit trail of all decisions'"
+
+# ============================================================================
+# DATA STRUCTURES
+# ============================================================================
+
+data_structures:
+
+  detection_input:
+    name: "Raw Detection from API"
+    schema: |
+      {
+        "latitude": number (decimal degrees),
+        "longitude": number (decimal degrees),
+        "confidence": number (any scale: 0-1, 0-100, etc),
+        "detection_type": string (e.g., "fire", "vehicle", "person"),
+        "timestamp": ISO8601 (when detection occurred),
+        [optional] "metadata": object (vendor-specific fields)
+      }
+    example:
+      latitude: 32.1234
+      longitude: -117.5678
+      confidence: 85
+      detection_type: "fire"
+      timestamp: "2026-02-17T14:35:42Z"
+    source: "Interview 3 - fire detection API"
+
+  normalized_detection:
+    name: "Normalized Detection (Internal)"
+    schema: |
+      {
+        "detection_id": string (unique identifier),
+        "source_id": string (which API this came from),
+        "latitude_normalized": number (decimal degrees, WGS84),
+        "longitude_normalized": number (decimal degrees, WGS84),
+        "confidence_normalized": number (0.0-1.0),
+        "confidence_original": {
+          "value": number,
+          "scale": string (e.g., "0-100")
+        },
+        "accuracy_meters": number,
+        "accuracy_flag": enum (GREEN | YELLOW | RED),
+        "detection_type": string,
+        "timestamp_detection": ISO8601,
+        "timestamp_received": ISO8601,
+        "timestamp_processed": ISO8601,
+        "operator_notes": string (optional),
+        "operator_verified_at": ISO8601 (optional)
+      }
+    example:
+      detection_id: "sat_20260217_143542_a1b2c3"
+      source_id: "satellite_fire_api"
+      latitude_normalized: 32.1234
+      longitude_normalized: -117.5678
+      confidence_normalized: 0.85
+      accuracy_meters: 45
+      accuracy_flag: "GREEN"
+    source: "Internal processing"
+
+  geojson_output:
+    name: "GeoJSON Feature (COP Format)"
+    schema: |
+      {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [longitude, latitude]
+        },
+        "properties": {
+          "source": string,
+          "source_id": string,
+          "detection_type": string,
+          "confidence": number (0-1),
+          "confidence_original": object,
+          "accuracy_m": number,
+          "accuracy_flag": string,
+          "timestamp": ISO8601,
+          "received_timestamp": ISO8601,
+          "operator_notes": string,
+          "reviewed_by": string (optional),
+          "reviewed_at": ISO8601 (optional),
+          "sync_status": enum (SYNCED | PENDING_SYNC | FAILED)
+        }
+      }
+    example:
+      type: "Feature"
+      geometry:
+        type: "Point"
+        coordinates: [-117.5678, 32.1234]
+      properties:
+        source: "satellite_fire_api"
+        confidence: 0.85
+        accuracy_flag: "GREEN"
+        timestamp: "2026-02-17T14:35:42Z"
+    source: "Interview 3 - TAK Server integration"
+
+# ============================================================================
+# ERROR STATES & RECOVERY PATHS
+# ============================================================================
+
+error_states:
+
+  - error_id: "E001"
+    name: "Invalid JSON"
+    severity: "LOW"
+    cause: "Detection API returned malformed JSON"
+    detection: "JSON parse fails"
+    recovery:
+      action: "Skip detection, continue polling"
+      log_entry: "INVALID_JSON from source_id=X at timestamp=Y"
+      operator_notification: "None (transparent)"
+      retry_strategy: "Continue with next poll"
+    impact: "Single detection lost, no system disruption"
+    evidence: "Interview 3: 'API sometimes returns garbage, need graceful handling'"
+
+  - error_id: "E002"
+    name: "Missing Coordinates"
+    severity: "MEDIUM"
+    cause: "Detection lacks lat/lon fields"
+    detection: "latitude or longitude field missing"
+    recovery:
+      action: "Flag for manual review, do not output to COP"
+      log_entry: "MISSING_COORDS from source_id=X"
+      operator_notification: "Alert: Detection requires manual location entry"
+      retry_strategy: "Wait for operator input or skip"
+    impact: "Detection queued for manual processing"
+    evidence: "Interview 5: 'Metadata loss is a problem, need to track source'"
+
+  - error_id: "E003"
+    name: "Out of Bounds Coordinates"
+    severity: "MEDIUM"
+    cause: "Coordinates outside valid range or deployment area"
+    detection: "lat > 90 or lat < -90 or lon > 180 or lon < -180"
+    recovery:
+      action: "Flag RED, require operator override before output to COP"
+      log_entry: "OUT_OF_BOUNDS lat=X lon=Y from source_id=Z"
+      operator_notification: "Alert: Suspicious location, manual review required"
+      retry_strategy: "Operator can manually correct or reject"
+    impact: "Detection not output until verified"
+    evidence: "Interview 1: 'If metadata is wrong, we catch it and investigate'"
+
+  - error_id: "E004"
+    name: "Low Confidence"
+    severity: "LOW"
+    cause: "Confidence score below minimum threshold (0.6)"
+    detection: "confidence_normalized < 0.6"
+    recovery:
+      action: "Flag YELLOW, output to COP with warning badge"
+      log_entry: "LOW_CONFIDENCE score=X from source_id=Y"
+      operator_notification: "Badge on map: 'Unverified detection'"
+      retry_strategy: "Operator can spot-check or ignore"
+    impact: "Detection visible but flagged; operator discretion"
+    evidence: "Interview 1: 'I'll spot-check flagged items, that saves time'"
+
+  - error_id: "E005"
+    name: "API Unreachable"
+    severity: "HIGH"
+    cause: "Cannot connect to detection source API"
+    detection: "Network timeout, connection refused, DNS fail"
+    recovery:
+      action: "Queue locally, retry with exponential backoff"
+      log_entry: "API_UNREACHABLE source_id=X error=Y"
+      operator_notification: "Dashboard shows: 'Source offline, buffering'"
+      retry_strategy: "Automatic retry every 5-30 seconds (exponential backoff)"
+    impact: "Detections queue locally until connection restored"
+    evidence: "Interview 4: 'System fails 30% of the time, need offline queueing'"
+
+  - error_id: "E006"
+    name: "Sync Failed (Cannot Push to Remote)"
+    severity: "HIGH"
+    cause: "Cannot write queued detections to remote database"
+    detection: "Remote DB unreachable, write fails, timeout"
+    recovery:
+      action: "Keep in local queue, retry on next connection check"
+      log_entry: "SYNC_FAILED queue_id=X error=Y"
+      operator_notification: "Dashboard shows: 'Syncing 5 detections (retry)'"
+      retry_strategy: "Automatic retry every 10 seconds"
+    impact: "Detections stay in local queue, system resilient"
+    evidence: "Interview 3: 'Three-day outage before we noticed, need better alerting'"
+
+offline_resilience:
+  name: "Offline-First Architecture"
+  trigger: "Network disconnected detected"
+  mechanism:
+    step_1: "Detections continue to flow from local API if available"
+    step_2: "Queue writes to local SQLite database"
+    step_3: "Queue marked as PENDING_SYNC"
+    step_4: "Operator sees: 'Buffering 5 detections (offline)'"
+    step_5: "Network restored → automatic sync begins"
+    step_6: "Sync succeeds → Queue marked SYNCED, operator sees: 'Syncing OK'"
+  time_impact: "5-10 second additional latency on reconnect"
+  data_safety: "SAFE - no data lost"
+  operator_experience: "TRANSPARENT - dashboard shows buffering status"
+  evidence: "Interview 4: 'If detections queue locally, I don't have to manually screenshot'"
+
+# ============================================================================
+# INTEGRATION CHECKPOINTS
+# ============================================================================
+
+integration_checkpoints:
+
+  - checkpoint_id: "CP1"
+    name: "Format Validation → Normalization"
+    precondition: "JSON payload successfully parsed"
+    shared_data: ["detection_id", "source_id", "all_fields"]
+    validation:
+      - "All required fields present"
+      - "Field types correct"
+      - "No duplicate detection_ids"
+    on_success: "Proceed to geolocation normalization"
+    on_failure: "Log error E001, continue polling"
+
+  - checkpoint_id: "CP2"
+    name: "Geolocation Normalization → Accuracy Check"
+    precondition: "Coordinates parsed and in valid range"
+    shared_data: ["latitude_normalized", "longitude_normalized", "accuracy_meters"]
+    validation:
+      - "-90 <= latitude <= 90"
+      - "-180 <= longitude <= 180"
+      - "accuracy_meters > 0 and < 50000"
+    on_success: "Proceed to accuracy flagging"
+    on_failure: "Log error E003, flag RED"
+
+  - checkpoint_id: "CP3"
+    name: "Accuracy Check → Confidence Normalization"
+    precondition: "Location validated, accuracy metrics available"
+    shared_data: ["accuracy_flag", "confidence_normalized"]
+    validation:
+      - "If accuracy > 500m, flag YELLOW"
+      - "If confidence < 0.6, flag YELLOW"
+      - "If both conditions met, flag RED"
+    on_success: "Proceed to confidence normalization"
+    on_failure: "Queue for operator review"
+
+  - checkpoint_id: "CP4"
+    name: "Confidence Normalization → GeoJSON Build"
+    precondition: "Confidence normalized to 0-1 scale"
+    shared_data: ["confidence_normalized", "confidence_original", "accuracy_flag"]
+    validation:
+      - "confidence_normalized between 0.0 and 1.0"
+      - "Original confidence preserved"
+      - "Conversion mapping documented"
+    on_success: "Proceed to GeoJSON building"
+    on_failure: "Log error, mark for investigation"
+
+  - checkpoint_id: "CP5"
+    name: "GeoJSON Build → Persistence"
+    precondition: "All enrichment complete"
+    shared_data: ["all_normalized_fields", "accuracy_flag"]
+    validation:
+      - "GeoJSON structure valid (RFC 7946)"
+      - "All required properties present"
+      - "Coordinates in [lon, lat] format"
+    on_success: "Proceed to persistence decision"
+    on_failure: "Cannot output, require manual intervention"
+
+  - checkpoint_id: "CP6"
+    name: "Persistence → Output Delivery"
+    precondition: "GeoJSON persisted (local or remote)"
+    shared_data: ["detection_id", "sync_status", "GeoJSON"]
+    validation:
+      - "If connected: detect in remote DB"
+      - "If offline: detect in local queue, marked PENDING_SYNC"
+    on_success: "Proceed to COP output"
+    on_failure: "Retry persistence, escalate if repeated fails"
+
+  - checkpoint_id: "CP7"
+    name: "Output Delivery → Operator View"
+    precondition: "Detection in COP system"
+    shared_data: ["GeoJSON", "accuracy_flag", "timestamp"]
+    validation:
+      - "Latency < 2 seconds from detection → operator sees"
+      - "Accuracy flag visible on map"
+      - "Source badge present"
+    on_success: "Operator engagement (observation, verification, action)"
+    on_failure: "Alert: Detection didn't reach COP, investigate"
+
+# ============================================================================
+# SHARED ARTIFACTS (Single Source of Truth)
+# ============================================================================
+
+shared_artifacts:
+
+  accuracy_threshold_meters: 500
+  accuracy_threshold_confidence: 0.6
+  polling_interval_seconds: 30
+  max_offline_queue_size: 10000
+  sync_retry_max_delay_seconds: 30
+  coordinate_system_standard: "EPSG:4326 (WGS84)"
+  confidence_normalization_target: "0.0-1.0"
+
+  artifact_ownership:
+    accuracy_threshold_meters:
+      owner: "System Integration Engineer"
+      validation_required_by: ["accuracy-flagging", "status-dashboard"]
+      changed_by: "Configuration only during ops calibration"
+
+    polling_interval_seconds:
+      owner: "Operations Manager"
+      validation_required_by: ["polling-service"]
+      changed_by: "Can be tuned per data source"
+
+    coordinate_system_standard:
+      owner: "Integration Specialist"
+      validation_required_by: ["coordinate-transformer", "geojson-builder"]
+      changed_by: "Fixed architectural choice"
+
+# ============================================================================
+# EMOTIONAL ARC
+# ============================================================================
+
+emotional_arc:
+
+  integration_engineer:
+    T0: "Anxious - 'This will take 2-3 weeks again'"
+    T5m: "Cautiously optimistic - 'Installation was surprisingly easy'"
+    T15m: "Uncertain - 'Is the configuration correct?'"
+    T25m: "Confident - 'Dry run matches what I expected'"
+    T35m: "Relieved - 'Actually done. Deployment succeeded'"
+    end: "Empowered - 'I can integrate another source this week'"
+
+  operations_manager:
+    T0: "Uncertain - 'Will this actually work?'"
+    T10m: "Curious - 'Let me see what the transformation looks like'"
+    T20m: "Skeptical - 'The accuracy flags need explanation'"
+    T30m: "Convinced - 'This matches reality. Locations look right'"
+    T35m: "Ready - 'Deploy it. I'll monitor the first hour'"
+    end: "Satisfied - 'Fewer false positives, faster dispatch'"
+
+  field_dispatcher:
+    T0: "Experienced - 'Another new system to learn'"
+    T5m: "Positive - 'Detections showing up faster than before'"
+    T15m: "Engaged - 'The accuracy flags are actually helpful'"
+    T30m: "Confident - 'I trust this system more than the old one'"
+    end: "Advocating - 'Can we integrate more sources? This is working'"
+
+# ============================================================================
+# SUCCESS METRICS
+# ============================================================================
+
+success_metrics:
+
+  installation_time:
+    target: "< 5 minutes"
+    baseline: "Variable, first time confusing"
+    measurement: "Duration from docker run to health check OK"
+    evidence: "Interview 3: 'We need to go from nothing to live in under an hour'"
+
+  configuration_time:
+    target: "< 10 minutes"
+    baseline: "1-2 hours (learning curve, documentation hunting)"
+    measurement: "Duration from 'add new source' to 'test connection passes'"
+    evidence: "Interview 3: 'Configuration should not be complex'"
+
+  validation_time:
+    target: "< 15 minutes"
+    baseline: "1-3 hours (debugging with live data)"
+    measurement: "Duration from dry-run start to operator approval"
+    evidence: "Interview 3: 'We want to validate with live data before going live'"
+
+  total_integration_time:
+    target: "< 1 hour"
+    baseline: "2-3 weeks (custom code approach)"
+    measurement: "Duration from install to live detections flowing"
+    evidence: "Interview 3: 'One hour vs. two weeks is huge'"
+
+  end_to_end_latency:
+    target: "< 2 seconds"
+    baseline: "5-45 minutes (manual processes)"
+    measurement: "Time from detection in API to operator sees on map"
+    evidence: "Interview 1: '<2 second latency needed for tactical ops'"
+
+  manual_verification_time:
+    target: "< 5 minutes for detection"
+    baseline: "30 minutes (geolocation validation)"
+    measurement: "Duration for operator to verify flagged detection"
+    evidence: "Interview 1: '80% time savings if system auto-checks accuracy'"
+
+  system_reliability:
+    target: "> 99%"
+    baseline: "70% (current custom integrations)"
+    measurement: "Percentage of detections successfully delivered"
+    evidence: "Interview 4: '30% failure rate makes system unreliable'"
+
+  integration_ease:
+    target: "New vendor in < 1 hour"
+    baseline: "2-3 weeks (custom code)"
+    measurement: "Time to add pre-built adapter vs. custom development"
+    evidence: "Interview 3: 'Pre-built adapters would save us weeks'"
+
+# ============================================================================
+# VERSION HISTORY
+# ============================================================================
+
+version_history:
+  - version: "1.0.0-walking-skeleton"
+    date: "2026-02-17"
+    status: "Initial DISCUSS wave - MVP scope"
+    changes:
+      - "Defined 6 phases: INSTALL → CONFIG → VALIDATE → DEPLOY → OPERATION"
+      - "Mapped 8 error states with recovery paths"
+      - "Established 7 integration checkpoints"
+      - "Documented shared artifacts registry"
+      - "Captured emotional arcs for 3 personas"
+    ready_for: "Phase 2 requirements crafting"
