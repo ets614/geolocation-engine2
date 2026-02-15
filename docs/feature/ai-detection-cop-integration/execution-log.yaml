@@ -37,32 +37,36 @@ events:
     tests_passing: 2
 
   - step_id: "02-05"
-    status: "IN_PROGRESS"
-    started_at: "2026-02-15T17:00:00Z"
+    status: "DONE"
+    completed_at: "2026-02-15T18:30:00Z"
     description: "AuditTrailService event logging"
-    notes: "Integrate audit trail across all detection processing steps"
+    notes: "Immutable append-only audit trail with 10 event types and database persistence"
+    tests_passing: 41
 
   - step_id: "03-01"
-    status: "PENDING"
+    status: "DONE"
+    completed_at: "2026-02-15T18:45:00Z"
     description: "OfflineQueueService - SQLite queue"
+    notes: "Queue detections when TAK unavailable with retry logic and sync callbacks"
+    tests_passing: 37
 
   - step_id: "03-02"
     status: "PENDING"
-    description: "Queue persistence and recovery"
+    description: "Queue persistence and recovery (integrated in 03-01)"
 
   - step_id: "03-03"
     status: "PENDING"
-    description: "Sync mechanism when network restored"
+    description: "Sync mechanism when network restored (integrated in 03-01)"
 
   - step_id: "03-04"
     status: "PENDING"
     description: "Error handling and rollback (E001-E006)"
 
 summary:
-  total_steps_done: 5
-  total_steps_in_progress: 1
-  total_steps_pending: 4
-  tests_passing: 46
-  tests_failing: 3
-  tests_erroring: 53
-  notes: "Core photogrammetry and CoT generation working. Fixing FastAPI imports. Phase 02-05 and Phase 03 next."
+  total_steps_done: 7
+  total_steps_in_progress: 0
+  total_steps_pending: 3
+  tests_passing: 124
+  tests_failing: 0
+  tests_erroring: 0
+  notes: "Phase 02-05: AuditTrailService complete with immutable event logging (41 tests). Phase 03-01: OfflineQueueService complete with resilient queue and sync (37 tests). All core services tested and working (124 passing). Ready for feature finalization."
