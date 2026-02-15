@@ -132,7 +132,7 @@ if __name__ == '__main__':
         'docs/feature/ai-detection-cop-integration/PROGRESS.md'
 
     output_file = sys.argv[2] if len(sys.argv) > 2 else \
-        '/tmp/AI_Detection_CoP_Progress.pdf'
+        'docs/feature/ai-detection-cop-integration/PROGRESS.pdf'
 
     try:
         result = generate_pdf(markdown_file, output_file)
