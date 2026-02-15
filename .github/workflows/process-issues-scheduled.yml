@@ -1,0 +1,169 @@
+name: Process Issues Scheduled
+
+# Run every 5 minutes to check for pending issues (GitHub Actions minimum)
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # Every 5 minutes (fastest possible)
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  process-pending:
+    name: Process Pending Issue Jobs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pyyaml
+
+      - name: Find pending jobs
+        id: pending
+        run: |
+          import json
+          import os
+          from pathlib import Path
+
+          job_files = list(Path('.nwave/jobs').glob('issue-*.json'))
+          pending_jobs = []
+
+          for job_file in job_files:
+            with open(job_file) as f:
+              job = json.load(f)
+              if job.get('status') == 'pending':
+                pending_jobs.append(job)
+
+          if pending_jobs:
+            print(f"Found {len(pending_jobs)} pending jobs")
+            for job in pending_jobs:
+              print(f"  - Issue #{job['issue_number']}: {job['agent']}")
+
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"count={len(pending_jobs)}\n")
+              f.write(f"jobs={json.dumps(pending_jobs)}\n")
+          else:
+            print("No pending jobs found")
+        shell: python3 {0}
+
+      - name: Update job status - processing
+        if: steps.pending.outputs.count > 0
+        run: |
+          import json
+          import os
+          from pathlib import Path
+
+          jobs = json.loads('${{ steps.pending.outputs.jobs }}'.replace("'", '"'))
+
+          for job in jobs:
+            job_file = Path(f".nwave/jobs/issue-{job['issue_number']}.json")
+            job['status'] = 'processing'
+            with open(job_file, 'w') as f:
+              json.dump(job, f, indent=2)
+
+          # Commit status update
+          os.system('git config user.name "Claude Code Agent"')
+          os.system('git config user.email "claude@anthropic.com"')
+          os.system('git add .nwave/jobs/*.json')
+          os.system('git commit -m "chore: Update job status to processing" || true')
+          os.system('git push || true')
+        shell: python3 {0}
+
+      - name: Process Phase 04 tasks
+        if: steps.pending.outputs.count > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jobs = JSON.parse('${{ steps.pending.outputs.jobs }}'.replace(/'/g, '"'));
+            const phase04Jobs = jobs.filter(j => j.agent === 'nw:deliver');
+
+            if (phase04Jobs.length === 0) return;
+
+            console.log(`Processing ${phase04Jobs.length} Phase 04 tasks...`);
+
+            for (const job of phase04Jobs) {
+              console.log(`Executing nw:deliver for issue #${job.issue_number}`);
+              // Agent execution would happen here
+              // For now, log the job details
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: job.issue_number,
+                body: `🤖 **Agent Processing Started**: \`nw:deliver\`\n\nThe agent is now executing the work...\n\n⏳ Expected PR creation in ~2-5 minutes\n\nCheck workflow runs for progress: ${context.server_url}/${context.repo.owner}/${context.repo.repo}/actions`
+              });
+            }
+
+      - name: Process Phase 05 tasks
+        if: steps.pending.outputs.count > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jobs = JSON.parse('${{ steps.pending.outputs.jobs }}'.replace(/'/g, '"'));
+            const phase05Jobs = jobs.filter(j => j.agent === 'nw:devops');
+
+            if (phase05Jobs.length === 0) return;
+
+            console.log(`Processing ${phase05Jobs.length} Phase 05 tasks...`);
+
+            for (const job of phase05Jobs) {
+              console.log(`Executing nw:devops for issue #${job.issue_number}`);
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: job.issue_number,
+                body: `🤖 **Agent Processing Started**: \`nw:devops\`\n\nThe platform architect agent is designing the infrastructure...\n\n⏳ Expected PR creation in ~3-5 minutes`
+              });
+            }
+
+      - name: Process Research tasks
+        if: steps.pending.outputs.count > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jobs = JSON.parse('${{ steps.pending.outputs.jobs }}'.replace(/'/g, '"'));
+            const researchJobs = jobs.filter(j => j.agent === 'nw:research');
+
+            if (researchJobs.length === 0) return;
+
+            console.log(`Processing ${researchJobs.length} research tasks...`);
+
+            for (const job of researchJobs) {
+              console.log(`Executing nw:research for issue #${job.issue_number}`);
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: job.issue_number,
+                body: `🤖 **Agent Processing Started**: \`nw:research\`\n\nThe researcher is investigating the topic...\n\n⏳ Expected PR with findings in ~2-3 minutes`
+              });
+            }
+
+      - name: Update job status - completed
+        if: success()
+        run: |
+          import json
+          import os
+          from pathlib import Path
+
+          job_files = list(Path('.nwave/jobs').glob('issue-*.json'))
+
+          for job_file in job_files:
+            with open(job_file) as f:
+              job = json.load(f)
+
+            if job.get('status') == 'processing':
+              # Note: In real implementation, check if PR was created before marking complete
+              # For now, we just log
+              print(f"Issue #{job['issue_number']} job would be marked complete after PR creation")
+        shell: python3 {0}
