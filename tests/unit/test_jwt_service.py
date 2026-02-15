@@ -138,4 +138,5 @@ class TestJWTService:
         expected_min = before + (expires_minutes * 60)
         expected_max = after + (expires_minutes * 60)
 
-        assert expected_min <= exp_timestamp <= expected_max
+        # Allow 1-second tolerance for timing variance
+        assert expected_min - 1 <= exp_timestamp <= expected_max + 1

@@ -147,11 +147,14 @@ async def create_detection(
             },
         )
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Detection processing error: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error_code": "E999",
-                "error_message": "Internal server error",
+                "error_message": f"Internal server error: {str(e)}",
                 "details": None,
             },
         )

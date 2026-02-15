@@ -86,8 +86,8 @@ class DetectionService:
                 sensor_height_mm=sensor.sensor_height_mm,
                 image_width=sensor.image_width,
                 image_height=sensor.image_height,
-                calculated_lat=geo_result.latitude,
-                calculated_lon=geo_result.longitude,
+                calculated_lat=geo_result.latitude,  # GeolocationResult has latitude, not calculated_lat
+                calculated_lon=geo_result.longitude,  # GeolocationResult has longitude, not calculated_lon
                 confidence_value=geo_result.confidence_value,
                 confidence_flag=geo_result.confidence_flag,
                 uncertainty_radius_meters=geo_result.uncertainty_radius_meters,

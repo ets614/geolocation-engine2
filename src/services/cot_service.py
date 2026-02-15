@@ -83,8 +83,11 @@ class CotService:
 
         # Point element with geolocation
         point = SubElement(event, "point")
-        point.set("lat", str(geolocation.calculated_lat))
-        point.set("lon", str(geolocation.calculated_lon))
+        # Handle both GeolocationResult and GeolocationValidationResult attribute names
+        lat = getattr(geolocation, 'calculated_lat', None) or geolocation.latitude
+        lon = getattr(geolocation, 'calculated_lon', None) or geolocation.longitude
+        point.set("lat", str(lat))
+        point.set("lon", str(lon))
         point.set("hae", "0.0")  # Height above ellipsoid
         point.set("ce", str(geolocation.uncertainty_radius_meters))  # Circular error (CEP)
         point.set("le", "9999999.0")  # Linear error

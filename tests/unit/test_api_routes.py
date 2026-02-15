@@ -148,7 +148,7 @@ class TestDetectionEndpoint:
         (0, False),  # Invalid: must be > 0
         (-1, False),  # Invalid: negative
     ])
-    def test_detection_accuracy_validation(self, test_client, accuracy, valid):
+    def test_detection_accuracy_validation(self, test_client, valid_auth_headers, accuracy, valid):
         """Verify accuracy_meters validation (must be > 0)."""
         payload = {
             "source": "test_source",
@@ -159,7 +159,7 @@ class TestDetectionEndpoint:
             "class": "fire",
             "timestamp": "2026-02-15T12:00:00Z"
         }
-        response = test_client.post("/api/v1/detections", json=payload)
+        response = test_client.post("/api/v1/detections", json=payload, headers=valid_auth_headers)
         if valid:
             assert response.status_code in [201, 500]
         else:
