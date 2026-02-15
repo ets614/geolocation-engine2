@@ -1,0 +1,505 @@
+# Grafana Dashboards (Dashboard definitions as ConfigMap)
+# File: kubernetes/monitoring/grafana-dashboards.yaml
+# Purpose: Define Grafana dashboards for system, business, performance, and security metrics
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  # Dashboard 1: System Metrics Dashboard
+  system-metrics-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "System Metrics Dashboard",
+        "description": "System-level metrics (CPU, Memory, Disk, Network)",
+        "panels": [
+          {
+            "id": 1,
+            "title": "CPU Usage",
+            "targets": [
+              {
+                "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+                "legendFormat": "CPU Usage %"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 2,
+            "title": "Memory Usage",
+            "targets": [
+              {
+                "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+                "legendFormat": "Memory Usage %"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 3,
+            "title": "Disk Usage",
+            "targets": [
+              {
+                "expr": "(1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100",
+                "legendFormat": "Disk Usage %"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 4,
+            "title": "Network I/O",
+            "targets": [
+              {
+                "expr": "rate(node_network_receive_bytes_total[5m])",
+                "legendFormat": "RX {{device}}"
+              },
+              {
+                "expr": "rate(node_network_transmit_bytes_total[5m])",
+                "legendFormat": "TX {{device}}"
+              }
+            ],
+            "type": "graph"
+          }
+        ],
+        "refresh": "30s",
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        }
+      }
+    }
+
+  # Dashboard 2: Business Metrics Dashboard
+  business-metrics-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "Business Metrics Dashboard",
+        "description": "Detection pipeline metrics and business KPIs",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Detections Received (Total)",
+            "targets": [
+              {
+                "expr": "increase(detections_received_total[1h])",
+                "legendFormat": "Total"
+              }
+            ],
+            "type": "stat"
+          },
+          {
+            "id": 2,
+            "title": "Detections Processed (Total)",
+            "targets": [
+              {
+                "expr": "increase(detections_processed_total[1h])",
+                "legendFormat": "Success"
+              }
+            ],
+            "type": "stat"
+          },
+          {
+            "id": 3,
+            "title": "Detection Success Rate",
+            "targets": [
+              {
+                "expr": "rate(detections_processed_total{status=\"success\"}[5m]) / rate(detections_received_total[5m]) * 100",
+                "legendFormat": "Success Rate %"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 4,
+            "title": "TAK Push Success Rate",
+            "targets": [
+              {
+                "expr": "rate(tak_push_attempts_total{status=\"success\"}[5m]) / rate(tak_push_attempts_total[5m]) * 100",
+                "legendFormat": "Success Rate %"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 5,
+            "title": "Confidence Distribution",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.5, detection_confidence_distribution_bucket)",
+                "legendFormat": "P50"
+              },
+              {
+                "expr": "histogram_quantile(0.95, detection_confidence_distribution_bucket)",
+                "legendFormat": "P95"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 6,
+            "title": "Offline Queue Status",
+            "targets": [
+              {
+                "expr": "offline_queue_size / offline_queue_max_size * 100",
+                "legendFormat": "Queue Usage %"
+              }
+            ],
+            "type": "gauge"
+          }
+        ],
+        "refresh": "30s",
+        "time": {
+          "from": "now-24h",
+          "to": "now"
+        }
+      }
+    }
+
+  # Dashboard 3: Performance Dashboard
+  performance-metrics-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "Performance Metrics Dashboard",
+        "description": "Request latency, throughput, and application performance",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Request Latency (P50)",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, rate(request_latency_seconds_bucket[5m]))",
+                "legendFormat": "P50"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 2,
+            "title": "Request Latency (P95)",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, rate(request_latency_seconds_bucket[5m]))",
+                "legendFormat": "P95 (SLO: 2s)"
+              }
+            ],
+            "type": "graph",
+            "thresholds": [
+              {
+                "value": 2.0,
+                "color": "orange"
+              },
+              {
+                "value": 5.0,
+                "color": "red"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Request Latency (P99)",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.99, rate(request_latency_seconds_bucket[5m]))",
+                "legendFormat": "P99 (SLO: 2s)"
+              }
+            ],
+            "type": "graph",
+            "thresholds": [
+              {
+                "value": 2.0,
+                "color": "orange"
+              },
+              {
+                "value": 5.0,
+                "color": "red"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Request Rate (RPS)",
+            "targets": [
+              {
+                "expr": "rate(requests_total[5m])",
+                "legendFormat": "{{method}} {{endpoint}}"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 5,
+            "title": "Error Rate (%)",
+            "targets": [
+              {
+                "expr": "(rate(errors_total[5m]) / rate(requests_total[5m])) * 100",
+                "legendFormat": "Error Rate %"
+              }
+            ],
+            "type": "graph",
+            "thresholds": [
+              {
+                "value": 0.1,
+                "color": "orange"
+              },
+              {
+                "value": 1.0,
+                "color": "red"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "title": "Database Query Latency",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m]))",
+                "legendFormat": "P95 {{operation}} {{table}}"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 7,
+            "title": "Cache Hit Rate",
+            "targets": [
+              {
+                "expr": "rate(cache_hits_total[5m]) / (rate(cache_hits_total[5m]) + rate(cache_misses_total[5m])) * 100",
+                "legendFormat": "Hit Rate % {{cache_name}}"
+              }
+            ],
+            "type": "graph"
+          }
+        ],
+        "refresh": "15s",
+        "time": {
+          "from": "now-6h",
+          "to": "now"
+        }
+      }
+    }
+
+  # Dashboard 4: Security Metrics Dashboard
+  security-metrics-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "Security Metrics Dashboard",
+        "description": "Authentication, authorization, and security event tracking",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Authentication Attempts",
+            "targets": [
+              {
+                "expr": "increase(auth_attempts_total[1h])",
+                "legendFormat": "{{method}}"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 2,
+            "title": "Authentication Failures",
+            "targets": [
+              {
+                "expr": "increase(auth_failures_total[1h])",
+                "legendFormat": "{{reason}}"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 3,
+            "title": "Auth Failure Rate (%)",
+            "targets": [
+              {
+                "expr": "(rate(auth_failures_total[5m]) / rate(auth_attempts_total[5m])) * 100",
+                "legendFormat": "Failure Rate %"
+              }
+            ],
+            "type": "gauge",
+            "thresholds": [
+              {
+                "value": 0.1,
+                "color": "green"
+              },
+              {
+                "value": 0.5,
+                "color": "orange"
+              },
+              {
+                "value": 1.0,
+                "color": "red"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Rate Limit Hits",
+            "targets": [
+              {
+                "expr": "increase(rate_limit_hits_total[1h])",
+                "legendFormat": "{{endpoint}}"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 5,
+            "title": "Invalid Requests",
+            "targets": [
+              {
+                "expr": "increase(invalid_requests_total[1h])",
+                "legendFormat": "{{endpoint}} {{error_type}}"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 6,
+            "title": "Validation Failures",
+            "targets": [
+              {
+                "expr": "increase(validation_failures_total[1h])",
+                "legendFormat": "{{field}} {{reason}}"
+              }
+            ],
+            "type": "graph"
+          },
+          {
+            "id": 7,
+            "title": "Audit Events by Type",
+            "targets": [
+              {
+                "expr": "increase(audit_events_total[1h])",
+                "legendFormat": "{{event_type}}"
+              }
+            ],
+            "type": "graph"
+          }
+        ],
+        "refresh": "30s",
+        "time": {
+          "from": "now-24h",
+          "to": "now"
+        }
+      }
+    }
+
+  # Dashboard 5: SLO Tracking Dashboard
+  slo-tracking-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "SLO Tracking Dashboard",
+        "description": "Service Level Objective compliance and error budget tracking",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Availability SLO (99.5%)",
+            "targets": [
+              {
+                "expr": "slo:availability:30d",
+                "legendFormat": "Current Availability"
+              }
+            ],
+            "type": "gauge",
+            "thresholds": [
+              {
+                "value": 99.5,
+                "color": "green"
+              },
+              {
+                "value": 99.0,
+                "color": "orange"
+              },
+              {
+                "value": 98.0,
+                "color": "red"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "title": "Latency P95 SLO (2s)",
+            "targets": [
+              {
+                "expr": "slo:latency_p95:30d",
+                "legendFormat": "Current P95"
+              }
+            ],
+            "type": "gauge",
+            "thresholds": [
+              {
+                "value": 2.0,
+                "color": "green"
+              },
+              {
+                "value": 5.0,
+                "color": "orange"
+              },
+              {
+                "value": 10.0,
+                "color": "red"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Error Rate SLO (99.9%)",
+            "targets": [
+              {
+                "expr": "100 - slo:error_rate:30d",
+                "legendFormat": "Success Rate"
+              }
+            ],
+            "type": "gauge",
+            "thresholds": [
+              {
+                "value": 99.9,
+                "color": "green"
+              },
+              {
+                "value": 99.0,
+                "color": "orange"
+              },
+              {
+                "value": 98.0,
+                "color": "red"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Error Budget Remaining (30d)",
+            "targets": [
+              {
+                "expr": "(100 - (100 - slo:availability:30d)) * 30 * 24 * 60",
+                "legendFormat": "Budget Remaining (minutes)"
+              }
+            ],
+            "type": "stat"
+          },
+          {
+            "id": 5,
+            "title": "SLO Compliance Timeline",
+            "targets": [
+              {
+                "expr": "slo:availability:30d",
+                "legendFormat": "Availability"
+              }
+            ],
+            "type": "graph"
+          }
+        ],
+        "refresh": "1m",
+        "time": {
+          "from": "now-30d",
+          "to": "now"
+        }
+      }
+    }

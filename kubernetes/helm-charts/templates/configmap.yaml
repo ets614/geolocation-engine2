@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "detection-api.fullname" . }}-config
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "detection-api.labels" . | nindent 4 }}
+data:
+  {{- with .Values.configMap }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}

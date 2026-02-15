@@ -1,0 +1,154 @@
+# Kubernetes Ingress Configuration for Detection API
+# File: kubernetes/manifests/ingress.yaml
+# Purpose: HTTPS ingress with path-based routing and rate limiting
+
+---
+# Ingress: Primary API Endpoint (HTTPS with cert-manager)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: detection-api-ingress
+  namespace: default
+  labels:
+    app: detection-api
+    component: ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+    # Rate Limiting
+    nginx.ingress.kubernetes.io/limit-rps: "1000"
+    nginx.ingress.kubernetes.io/limit-connections: "100"
+    nginx.ingress.kubernetes.io/limit-window: "10m"
+
+    # Security Headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Permissions-Policy: geolocation=(), microphone=(), camera=()";
+
+    # CORS Configuration
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://trusted-domain.com"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization"
+
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - detection-api.internal.example.com
+      secretName: detection-api-tls
+  rules:
+    - host: detection-api.internal.example.com
+      http:
+        paths:
+          # API V1 Routes
+          - path: /api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: detection-api-service
+                port:
+                  number: 8000
+
+          # Health Check
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: detection-api-service
+                port:
+                  number: 8000
+
+          # Readiness Probe
+          - path: /ready
+            pathType: Prefix
+            backend:
+              service:
+                name: detection-api-service
+                port:
+                  number: 8000
+
+          # Metrics Endpoint (for Prometheus)
+          - path: /metrics
+            pathType: Prefix
+            backend:
+              service:
+                name: detection-api-service
+                port:
+                  number: 8000
+
+---
+# Ingress: Internal API (without external HTTPS)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: detection-api-internal
+  namespace: default
+  labels:
+    app: detection-api
+    component: ingress
+    scope: internal
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: basic-auth
+
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: detection-api-internal.cluster.local
+      http:
+        paths:
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: detection-api-service
+                port:
+                  number: 8000
+          - path: /debug
+            pathType: Prefix
+            backend:
+              service:
+                name: detection-api-service
+                port:
+                  number: 8000
+
+---
+# Basic Auth Secret for Internal Ingress
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-auth
+  namespace: default
+type: Opaque
+stringData:
+  auth: "admin:$apr1$change_me_in_production"  # htpasswd -c auth admin
+
+---
+# NetworkPolicy: Ingress Controller Access
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-controller
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: detection-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000

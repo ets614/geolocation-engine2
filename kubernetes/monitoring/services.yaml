@@ -1,0 +1,187 @@
+# Services for Monitoring Stack
+# File: kubernetes/monitoring/services.yaml
+# Purpose: Expose Prometheus, Grafana, Jaeger, and ELK services
+
+---
+# Prometheus Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  type: ClusterIP
+  ports:
+    - name: web
+      port: 9090
+      targetPort: 9090
+  selector:
+    app: prometheus
+
+---
+# Grafana Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  type: ClusterIP
+  ports:
+    - name: web
+      port: 3000
+      targetPort: 3000
+  selector:
+    app: grafana
+
+---
+# Jaeger Collector Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-collector
+  namespace: monitoring
+  labels:
+    app: jaeger-collector
+spec:
+  type: ClusterIP
+  ports:
+    - name: jaeger-agent-zipkin-thrift
+      port: 6831
+      targetPort: 6831
+      protocol: UDP
+    - name: jaeger-collector-http
+      port: 14268
+      targetPort: 14268
+    - name: jaeger-collector-grpc
+      port: 14250
+      targetPort: 14250
+    - name: metrics
+      port: 14269
+      targetPort: 14269
+  selector:
+    app: jaeger-collector
+
+---
+# Jaeger UI Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-ui
+  namespace: monitoring
+  labels:
+    app: jaeger
+spec:
+  type: ClusterIP
+  ports:
+    - name: web
+      port: 16686
+      targetPort: 16686
+  selector:
+    app: jaeger-collector
+
+---
+# Elasticsearch Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch
+  namespace: monitoring
+  labels:
+    app: elasticsearch
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9200
+      targetPort: 9200
+    - name: node-comm
+      port: 9300
+      targetPort: 9300
+  selector:
+    app: elasticsearch
+
+---
+# Kibana Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  namespace: monitoring
+  labels:
+    app: kibana
+spec:
+  type: ClusterIP
+  ports:
+    - name: web
+      port: 5601
+      targetPort: 5601
+  selector:
+    app: kibana
+
+---
+# Ingress for Monitoring Stack
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: monitoring-ingress
+  namespace: monitoring
+  labels:
+    app: monitoring
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - prometheus.internal.example.com
+        - grafana.internal.example.com
+        - jaeger.internal.example.com
+        - kibana.internal.example.com
+      secretName: monitoring-tls
+  rules:
+    - host: prometheus.internal.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus
+                port:
+                  number: 9090
+    - host: grafana.internal.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3000
+    - host: jaeger.internal.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jaeger-ui
+                port:
+                  number: 16686
+    - host: kibana.internal.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kibana
+                port:
+                  number: 5601

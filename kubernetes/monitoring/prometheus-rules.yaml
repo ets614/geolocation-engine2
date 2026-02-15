@@ -1,0 +1,319 @@
+# Prometheus Alert Rules for Detection API
+# File: kubernetes/monitoring/prometheus-rules.yaml
+# Purpose: Define alert rules based on SLOs and thresholds
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: detection-api-alerts
+  namespace: monitoring
+  labels:
+    app: detection-api
+spec:
+  groups:
+    - name: detection-api.rules
+      interval: 30s
+      rules:
+        # Error Rate Alerts
+        - alert: HighErrorRate
+          expr: |
+            (rate(errors_total[5m]) / rate(requests_total[5m])) > 0.01
+          for: 5m
+          labels:
+            severity: critical
+            slo_name: "Error Rate"
+          annotations:
+            summary: "High error rate detected"
+            description: "Error rate is {{ $value | humanizePercentage }} (threshold: 1%)"
+
+        # Latency Alerts
+        - alert: HighLatencyP95
+          expr: |
+            histogram_quantile(0.95, rate(request_latency_seconds_bucket[5m])) > 2.0
+          for: 5m
+          labels:
+            severity: warning
+            slo_name: "Latency P95"
+          annotations:
+            summary: "High request latency (P95)"
+            description: "P95 latency is {{ $value }}s (SLO: 2s)"
+
+        - alert: CriticalLatencyP95
+          expr: |
+            histogram_quantile(0.95, rate(request_latency_seconds_bucket[5m])) > 5.0
+          for: 2m
+          labels:
+            severity: critical
+            slo_name: "Latency P95"
+          annotations:
+            summary: "Critical request latency (P95)"
+            description: "P95 latency is {{ $value }}s (threshold: 5s)"
+
+        - alert: HighLatencyP99
+          expr: |
+            histogram_quantile(0.99, rate(request_latency_seconds_bucket[5m])) > 5.0
+          for: 5m
+          labels:
+            severity: warning
+            slo_name: "Latency P99"
+          annotations:
+            summary: "High request latency (P99)"
+            description: "P99 latency is {{ $value }}s (SLO: 2s)"
+
+        # Authentication Alerts
+        - alert: HighAuthenticationFailureRate
+          expr: |
+            rate(auth_failures_total[5m]) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High authentication failure rate"
+            description: "Auth failures per second: {{ $value }}"
+
+        # Rate Limiting Alerts
+        - alert: HighRateLimitHits
+          expr: |
+            increase(rate_limit_hits_total[5m]) > 100
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High rate limit hits"
+            description: "Rate limit hits in last 5 minutes: {{ $value }}"
+
+        # Validation Alerts
+        - alert: HighValidationFailureRate
+          expr: |
+            rate(validation_failures_total[5m]) > 1.0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High validation failure rate"
+            description: "Validation failures per second: {{ $value }}"
+
+        # Database Alerts
+        - alert: HighDatabaseQueryLatency
+          expr: |
+            histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m])) > 1.0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High database query latency"
+            description: "P95 query latency: {{ $value }}s"
+
+        - alert: DatabaseConnectionPoolExhausted
+          expr: |
+            db_connections_active > 90
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Database connection pool exhausted"
+            description: "Active connections: {{ $value }}"
+
+        # Cache Alerts
+        - alert: LowCacheHitRate
+          expr: |
+            rate(cache_hits_total[5m]) / (rate(cache_hits_total[5m]) + rate(cache_misses_total[5m])) < 0.7
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Low cache hit rate"
+            description: "Cache hit rate: {{ $value | humanizePercentage }}"
+
+        # Offline Queue Alerts
+        - alert: OfflineQueueSizeCritical
+          expr: |
+            offline_queue_size > (offline_queue_max_size * 0.9)
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Offline queue nearly full"
+            description: "Queue size: {{ $value }} (max: {{ $value | humanize }})"
+
+        - alert: OfflineQueueErrors
+          expr: |
+            increase(offline_queue_errors_total[5m]) > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Offline queue errors detected"
+            description: "Errors in last 5 minutes: {{ $value }}"
+
+        # Connectivity Alerts
+        - alert: TAKServerUnreachable
+          expr: |
+            tak_server_connectivity == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "TAK server is unreachable"
+            description: "Unable to reach TAK server"
+
+        - alert: TAKServerHighLatency
+          expr: |
+            histogram_quantile(0.95, rate(tak_server_latency_seconds_bucket[5m])) > 5.0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "TAK server response latency high"
+            description: "P95 latency to TAK: {{ $value }}s"
+
+        # Pod Alerts
+        - alert: PodCrashLooping
+          expr: |
+            rate(increase(kube_pod_container_status_restarts_total{pod=~"detection-api.*"}[15m])) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod is crash looping"
+            description: "Pod {{ $labels.pod }} is restarting frequently"
+
+        - alert: PodNotReady
+          expr: |
+            kube_pod_status_ready{pod=~"detection-api.*", condition="false"} == 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod is not ready"
+            description: "Pod {{ $labels.pod }} is not ready"
+
+        # Resource Alerts
+        - alert: DiskUsageHigh
+          expr: |
+            (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) > 0.80
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Disk usage is high"
+            description: "Disk usage: {{ $value | humanizePercentage }}"
+
+        - alert: DiskUsageCritical
+          expr: |
+            (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) > 0.90
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Disk usage is critical"
+            description: "Disk usage: {{ $value | humanizePercentage }}"
+
+        - alert: MemoryUsageHigh
+          expr: |
+            (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Memory usage is high"
+            description: "Memory usage: {{ $value | humanizePercentage }}"
+
+        - alert: MemoryUsageCritical
+          expr: |
+            (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.95
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Memory usage is critical"
+            description: "Memory usage: {{ $value | humanizePercentage }}"
+
+        - alert: CPUUsageHigh
+          expr: |
+            (100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 90
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "CPU usage is high"
+            description: "CPU usage: {{ $value | humanize }}%"
+
+        # Availability Alerts
+        - alert: ServiceAvailabilityLow
+          expr: |
+            (count(kube_pod_status_ready{pod=~"detection-api.*", condition="true"}) / count(kube_pod_status_ready{pod=~"detection-api.*"})) < 0.99
+          for: 5m
+          labels:
+            severity: warning
+            slo_name: "Availability"
+          annotations:
+            summary: "Service availability below SLO"
+            description: "Availability: {{ $value | humanizePercentage }} (SLO: 99.5%)"
+
+        # Detection Pipeline Alerts
+        - alert: HighDetectionFailureRate
+          expr: |
+            rate(detections_processed_total{status="failed"}[5m]) > 1.0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High detection failure rate"
+            description: "Failures per second: {{ $value }}"
+
+        - alert: DetectionBacklogBuilding
+          expr: |
+            increase(detections_received_total[5m]) - increase(detections_processed_total[5m]) > 100
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Detection processing backlog building"
+            description: "Unprocessed detections: {{ $value }}"
+
+        # Throughput Alerts
+        - alert: ThroughputDegraded
+          expr: |
+            rate(detections_processed_total[5m]) < 100
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Detection throughput degraded"
+            description: "Throughput: {{ $value }}/sec (target: 1000/sec)"
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: detection-api-slo-tracking
+  namespace: monitoring
+  labels:
+    app: detection-api
+spec:
+  groups:
+    - name: detection-api-slo.rules
+      interval: 30s
+      rules:
+        # SLO Recording Rules
+        - record: slo:availability:30d
+          expr: |
+            (count(kube_pod_status_ready{pod=~"detection-api.*", condition="true"}) / count(kube_pod_status_ready{pod=~"detection-api.*"})) * 100
+
+        - record: slo:latency_p95:30d
+          expr: |
+            histogram_quantile(0.95, rate(request_latency_seconds_bucket[30d]))
+
+        - record: slo:latency_p99:30d
+          expr: |
+            histogram_quantile(0.99, rate(request_latency_seconds_bucket[30d]))
+
+        - record: slo:error_rate:30d
+          expr: |
+            (1 - (rate(requests_total{status=~"2.."}[30d]) / rate(requests_total[30d]))) * 100
+
+        - record: slo:throughput:30d
+          expr: |
+            rate(detections_processed_total[30d])

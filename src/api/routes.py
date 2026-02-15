@@ -1,5 +1,5 @@
 """API routes for detection ingestion with CoT/TAK output."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -10,6 +10,7 @@ from src.services.jwt_service import JWTService
 from src.database import get_db_session
 from src.config import get_config
 from src.api.auth import verify_jwt_token
+from typing import Optional
 
 router = APIRouter(prefix="/api/v1", tags=["detections"])
 
@@ -155,3 +156,63 @@ async def create_detection(
                 "details": None,
             },
         )
+
+
+class RateLimitMetricsResponse(BaseModel):
+    """Rate limit metrics response."""
+    quota_limit: int
+    quota_used: int
+    quota_remaining: int
+    quota_reset_time_seconds: int
+
+
+@router.get(
+    "/metrics/rate-limit",
+    response_model=RateLimitMetricsResponse,
+    responses={
+        400: {"description": "Missing or invalid client_id"},
+        401: {"description": "Unauthorized"},
+    }
+)
+async def get_rate_limit_metrics(
+    request: Request,
+    client_id: Optional[str] = None,
+):
+    """Get rate limit quota metrics for a client.
+
+    Args:
+        request: HTTP request (to access rate limiter from app state)
+        client_id: Client identifier (optional, uses authenticated client if not provided)
+
+    Returns:
+        RateLimitMetricsResponse: Current quota usage and reset time
+
+    Raises:
+        HTTPException: 400 if client_id is missing, 401 if unauthorized
+    """
+    # Get client ID from parameter or request state
+    actual_client_id = client_id or getattr(request.state, "client_id", None)
+
+    if not actual_client_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="client_id is required",
+        )
+
+    # Get rate limiter from app state (set up by middleware)
+    rate_limiter = getattr(request.app.state, "rate_limiter", None)
+    if not rate_limiter:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Rate limiter not configured",
+        )
+
+    # Get quota usage
+    usage = rate_limiter.get_quota_usage(actual_client_id)
+
+    return RateLimitMetricsResponse(
+        quota_limit=usage["quota_limit"],
+        quota_used=usage["quota_used"],
+        quota_remaining=usage["quota_remaining"],
+        quota_reset_time_seconds=usage["quota_reset_time_seconds"],
+    )

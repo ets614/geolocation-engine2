@@ -14,7 +14,7 @@ app = FastAPI(
 )
 
 # Setup middleware
-setup_middleware(app, config)
+setup_middleware(app)
 
 # Register routes
 app.include_router(detection_router)

@@ -1,0 +1,50 @@
+# Grafana Data Sources
+# File: kubernetes/monitoring/grafana-datasources.yaml
+# Purpose: Configure Prometheus and Elasticsearch as data sources for Grafana
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        isDefault: true
+        access: proxy
+        url: http://prometheus:9090
+        jsonData:
+          timeInterval: 15s
+        editable: true
+
+  elasticsearch.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Elasticsearch
+        type: elasticsearch
+        access: proxy
+        url: http://elasticsearch:9200
+        database: logs
+        jsonData:
+          esVersion: 8
+          logMessageField: message
+          logLevelField: level
+          timeField: timestamp
+        editable: true
+
+  jaeger.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Jaeger
+        type: jaeger
+        access: proxy
+        url: http://jaeger-collector:14268
+        jsonData:
+          tracingQueryProfile: uber
+        editable: true

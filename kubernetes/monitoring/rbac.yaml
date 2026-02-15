@@ -1,0 +1,121 @@
+# RBAC for Monitoring Stack
+# File: kubernetes/monitoring/rbac.yaml
+# Purpose: Define service accounts and RBAC for Prometheus and monitoring components
+
+---
+# ServiceAccount for Prometheus
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+
+---
+# ClusterRole for Prometheus
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+rules:
+  - apiGroups: ['']
+    resources:
+      - nodes
+      - nodes/proxy
+      - nodes/stats
+      - services
+      - endpoints
+      - pods
+    verbs: ['get', 'list', 'watch']
+  - apiGroups: ['apps']
+    resources:
+      - deployments
+      - daemonsets
+      - replicasets
+      - statefulsets
+    verbs: ['get', 'list', 'watch']
+  - apiGroups: ['batch']
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ['get', 'list', 'watch']
+  - nonResourceURLs: ['/metrics', '/metrics/cadvisor']
+    verbs: ['get']
+  - apiGroups: ['monitoring.coreos.com']
+    resources:
+      - servicemonitors
+      - prometheusrules
+    verbs: ['get', 'list', 'watch']
+
+---
+# ClusterRoleBinding for Prometheus
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: monitoring
+
+---
+# ServiceAccount for Jaeger
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jaeger
+  namespace: monitoring
+  labels:
+    app: jaeger
+
+---
+# Role for Jaeger in monitoring namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jaeger
+  namespace: monitoring
+  labels:
+    app: jaeger
+rules:
+  - apiGroups: ['']
+    resources:
+      - configmaps
+      - secrets
+    verbs: ['get', 'list', 'watch']
+
+---
+# RoleBinding for Jaeger
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jaeger
+  namespace: monitoring
+  labels:
+    app: jaeger
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: jaeger
+subjects:
+  - kind: ServiceAccount
+    name: jaeger
+    namespace: monitoring
+
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring

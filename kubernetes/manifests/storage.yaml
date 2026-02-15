@@ -1,0 +1,115 @@
+# Kubernetes Storage Configuration for Detection API
+# File: kubernetes/manifests/storage.yaml
+# Purpose: Define storage classes and persistent volumes for Phase 05
+
+---
+# StorageClass: SSD for Queue Database (fast access, critical data)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd
+  labels:
+    type: fast
+    tier: ssd
+provisioner: kubernetes.io/aws-ebs
+allowVolumeExpansion: true
+parameters:
+  type: gp3
+  iops: "3000"
+  throughput: "125"
+  encrypted: "true"
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+
+---
+# StorageClass: Standard for Database (persistent, replicated)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: standard-db
+  labels:
+    type: standard
+    tier: db
+provisioner: kubernetes.io/aws-ebs
+allowVolumeExpansion: true
+parameters:
+  type: gp3
+  iops: "1000"
+  throughput: "50"
+  encrypted: "true"
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+
+---
+# PersistentVolume: Queue Database Storage (SSD)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: detection-queue-pv
+  labels:
+    type: fast-ssd
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Delete
+  storageClassName: fast-ssd
+  awsElasticBlockStore:
+    volumeID: vol-xxxxx
+    fsType: ext4
+
+---
+# PersistentVolume: Cache Storage (SSD)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: detection-cache-pv
+  labels:
+    type: fast-ssd
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Delete
+  storageClassName: fast-ssd
+  awsElasticBlockStore:
+    volumeID: vol-yyyyy
+    fsType: ext4
+
+---
+# PersistentVolumeClaim: Queue Database
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: detection-queue-pvc
+  namespace: default
+  labels:
+    app: detection-api
+    component: queue
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# PersistentVolumeClaim: Cache Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: detection-cache-pvc
+  namespace: default
+  labels:
+    app: detection-api
+    component: cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 10Gi

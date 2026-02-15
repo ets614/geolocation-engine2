@@ -1,0 +1,392 @@
+name: Terraform IaC Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - 'scripts/deploy.sh'
+      - 'scripts/disaster-recovery.sh'
+      - '.github/workflows/terraform-iac.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - 'scripts/deploy.sh'
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_VERSION: 1.5.0
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  # STAGE 1: Terraform Lint & Validate
+  terraform-lint:
+    name: Terraform Lint & Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform format check
+        run: terraform fmt -check -recursive terraform/
+
+      - name: Terraform validate
+        run: |
+          cd terraform
+          terraform init -backend=false
+          terraform validate
+
+      - name: TFLint
+        uses: terraform-linters/setup-tflint@v3
+
+      - name: Cache TFLint plugins
+        uses: actions/cache@v3
+        with:
+          path: ~/.tflint.d/plugins
+          key: ${{ runner.os }}-tflint-${{ hashFiles('terraform/.tflint.hcl') }}
+
+      - name: Run TFLint
+        run: |
+          cd terraform
+          tflint --init
+          tflint --format compact
+
+  # STAGE 2: Terraform Plan (for PRs)
+  terraform-plan-pr:
+    name: Terraform Plan (PR)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: terraform-lint
+    strategy:
+      matrix:
+        environment: [dev, staging, prod]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-terraform-plan
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: |
+          cd terraform
+          terraform init
+
+      - name: Terraform Plan (${{ matrix.environment }})
+        id: plan
+        run: |
+          cd terraform
+          terraform plan \
+            -var-file="environments/${{ matrix.environment }}.tfvars" \
+            -no-color \
+            -out=tfplan-${{ matrix.environment }}.bin
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: tfplan-${{ matrix.environment }}
+          path: terraform/tfplan-${{ matrix.environment }}.bin
+
+      - name: Comment PR with Plan
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const environment = '${{ matrix.environment }}';
+
+            let comment = `## Terraform Plan: ${environment}\n\n`;
+            comment += '```\n';
+            comment += 'Plan details available in artifacts\n';
+            comment += '```\n';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # STAGE 3: Cost Estimation
+  terraform-cost:
+    name: Terraform Cost Estimation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: terraform-lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-terraform-cost
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install Infracost
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | bash
+
+      - name: Generate cost estimate
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+        run: |
+          cd terraform
+          infracost breakdown --path . --format json --out infracost.json
+          infracost comment github --path infracost.json --github-token ${{ github.token }}
+
+  # STAGE 4: Security Scan (Checkov)
+  terraform-security:
+    name: Terraform Security Scan
+    runs-on: ubuntu-latest
+    needs: terraform-lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform
+          framework: terraform
+          output_format: sarif
+          output_file_path: reports/checkov.sarif
+
+      - name: Upload Checkov SARIF
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: reports/checkov.sarif
+
+  # STAGE 5: Documentation
+  terraform-docs:
+    name: Terraform Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate Terraform docs
+        uses: terraform-docs/gh-actions@main
+        with:
+          working_dir: terraform
+          output_file: TERRAFORM.md
+          output_method: inject
+          git_push: false
+
+      - name: Comment PR with docs
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const docs = fs.readFileSync('TERRAFORM.md', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: docs.substring(0, 30000) // GitHub comment limit
+            });
+
+  # STAGE 6: Terraform Apply (main branch only, manual approval)
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [terraform-lint, terraform-security]
+    environment:
+      name: terraform-apply
+      # Manual approval required for each environment
+    strategy:
+      matrix:
+        environment: [dev, staging, prod]
+      max-parallel: 1  # Serial deployment to avoid conflicts
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-terraform-apply-${{ matrix.environment }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: |
+          cd terraform
+          terraform init
+
+      - name: Terraform Plan (${{ matrix.environment }})
+        run: |
+          cd terraform
+          terraform plan \
+            -var-file="environments/${{ matrix.environment }}.tfvars" \
+            -out=tfplan-${{ matrix.environment }}.bin
+
+      - name: Terraform Apply (${{ matrix.environment }})
+        run: |
+          cd terraform
+          terraform apply \
+            -auto-approve \
+            tfplan-${{ matrix.environment }}.bin
+        timeout-minutes: 60
+
+      - name: Export Terraform Outputs
+        id: tf-outputs
+        run: |
+          cd terraform
+          echo "eks_cluster=$(terraform output -raw eks_cluster_name)" >> $GITHUB_OUTPUT
+          echo "rds_endpoint=$(terraform output -raw rds_endpoint)" >> $GITHUB_OUTPUT
+          echo "redis_endpoint=$(terraform output -raw redis_endpoint)" >> $GITHUB_OUTPUT
+          echo "alb_dns=$(terraform output -raw alb_dns_name)" >> $GITHUB_OUTPUT
+
+      - name: Update kubeconfig
+        env:
+          EKS_CLUSTER: ${{ steps.tf-outputs.outputs.eks_cluster }}
+        run: |
+          aws eks update-kubeconfig \
+            --name $EKS_CLUSTER \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Deploy application to EKS
+        run: |
+          kubectl apply -f kubernetes/manifests/
+
+      - name: Health Check
+        run: |
+          kubectl wait --for=condition=ready pod \
+            -l app=detection-api \
+            --all-namespaces \
+            --timeout=600s
+
+      - name: Slack notification (success)
+        if: success()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "Terraform Apply Success - ${{ matrix.environment }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Terraform Apply Success* :rocket:\n\nEnvironment: `${{ matrix.environment }}`\nEKS Cluster: `${{ steps.tf-outputs.outputs.eks_cluster }}`\nALB DNS: `${{ steps.tf-outputs.outputs.alb_dns }}`"
+                  }
+                }
+              ]
+            }
+
+      - name: Slack notification (failure)
+        if: failure()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "Terraform Apply Failed - ${{ matrix.environment }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Terraform Apply Failed* :x:\n\nEnvironment: `${{ matrix.environment }}`\nCheck logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  }
+                }
+              ]
+            }
+
+  # STAGE 7: Disaster Recovery Test
+  disaster-recovery-test:
+    name: Disaster Recovery Validation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: terraform-apply
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-dr-test
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run disaster recovery test
+        run: |
+          chmod +x scripts/disaster-recovery.sh
+          ./scripts/disaster-recovery.sh test
+
+      - name: Upload DR test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: dr-test-results
+          path: /tmp/disaster-recovery-*/
+
+  # STAGE 8: Notification
+  notify:
+    name: Notify Deployment
+    runs-on: ubuntu-latest
+    needs: [terraform-apply, disaster-recovery-test]
+    if: always()
+    steps:
+      - name: Determine status
+        id: status
+        run: |
+          if [ "${{ needs.terraform-apply.result }}" = "success" ] && [ "${{ needs.disaster-recovery-test.result }}" = "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Slack notification
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "Phase 05 IaC Pipeline Complete",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Phase 05 IaC Pipeline* - ${{ steps.status.outputs.status }}\n\nCommit: `${{ github.sha }}`\nAuthor: ${{ github.actor }}"
+                  }
+                }
+              ]
+            }

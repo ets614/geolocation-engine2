@@ -1,0 +1,30 @@
+apiVersion: v2
+name: detection-api
+description: Kubernetes Helm chart for AI Detection to COP Integration (Phase 05)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+maintainers:
+  - name: Platform Architecture Team
+    email: platform@example.com
+
+keywords:
+  - detection
+  - geolocation
+  - cot
+  - tak
+  - kubernetes
+
+dependencies: []
+
+home: https://github.com/example/geolocation-engine2
+sources:
+  - https://github.com/example/geolocation-engine2
+  - https://github.com/example/geolocation-engine2/tree/main/kubernetes
+
+icon: https://example.com/icon.png
+
+annotations:
+  category: Integration
+  licenses: Apache-2.0

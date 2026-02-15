@@ -1,0 +1,55 @@
+issue: "#18"
+title: "Input Validation & Sanitization for Phase 04"
+feature: "security-hardening"
+phase: "04"
+status: "IN_PROGRESS"
+created_at: "2026-02-15T18:30:00Z"
+
+tdd_phases:
+  prepare:
+    status: "IN_PROGRESS"
+    description: "Define acceptance test for input validation"
+
+  red_acceptance:
+    status: "PENDING"
+    description: "Acceptance test fails until all validation implemented"
+
+  red_unit:
+    status: "PENDING"
+    description: "Unit tests for validation behaviors"
+    test_budget: "9 behaviors x 2 = 18+ unit tests"
+
+  green:
+    status: "PENDING"
+    description: "Implement validation middleware, schemas, sanitization"
+
+  commit:
+    status: "PENDING"
+    description: "Commit with all 5 phases documented"
+
+distinct_behaviors:
+  - "Type validation errors return 400 with field details"
+  - "Range validation errors return 400 with constraint info"
+  - "SQL injection patterns are sanitized"
+  - "XSS payloads are escaped/blocked"
+  - "Path traversal attempts blocked"
+  - "Command injection blocked"
+  - "File uploads validated (type, size, filename)"
+  - "Middleware logs validation failures"
+  - "Suspicious patterns tracked in audit log"
+
+implementation_scope:
+  - "src/services/validation_service.py - Pydantic v2 schemas + custom validators"
+  - "src/middleware/validation_middleware.py - RequestValidationMiddleware"
+  - "src/services/sanitization_service.py - SQL, XSS, path, command sanitization"
+  - "src/middleware/csrf_middleware.py - CSRF token validation"
+  - "src/services/file_upload_validator.py - File validation"
+  - "tests/unit/test_validation_service.py - Validation unit tests"
+  - "tests/unit/test_sanitization_service.py - Sanitization tests"
+  - "tests/unit/test_validation_middleware.py - Middleware tests"
+  - "tests/integration/test_input_validation_e2e.py - Acceptance test"
+
+metrics:
+  unit_tests_planned: 30
+  injection_test_cases: 10
+  validation_rules: 25

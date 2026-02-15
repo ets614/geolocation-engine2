@@ -1,0 +1,96 @@
+# ServiceMonitor for Detection API
+# File: kubernetes/monitoring/servicemonitor.yaml
+# Purpose: Define Prometheus ServiceMonitor for automatic scrape target discovery
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: detection-api
+  namespace: monitoring
+  labels:
+    app: detection-api
+spec:
+  selector:
+    matchLabels:
+      app: detection-api
+  endpoints:
+    - port: http
+      interval: 15s
+      path: /metrics
+      relabelings:
+        - source_labels: [__meta_kubernetes_pod_name]
+          target_label: pod
+        - source_labels: [__meta_kubernetes_pod_node_name]
+          target_label: node
+        - source_labels: [__meta_kubernetes_namespace]
+          target_label: namespace
+
+---
+# ServiceMonitor for Jaeger Collector
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: jaeger-collector
+  namespace: monitoring
+  labels:
+    app: jaeger
+spec:
+  selector:
+    matchLabels:
+      app: jaeger-collector
+  endpoints:
+    - port: metrics
+      interval: 15s
+
+---
+# ServiceMonitor for Elasticsearch (if using for logs)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: elasticsearch
+  namespace: monitoring
+  labels:
+    app: elasticsearch
+spec:
+  selector:
+    matchLabels:
+      app: elasticsearch
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /_prometheus/metrics
+
+---
+# ServiceMonitor for Prometheus Operator
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring
+  labels:
+    app: kube-state-metrics
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  endpoints:
+    - port: http-metrics
+      interval: 15s
+
+---
+# ServiceMonitor for Node Exporter
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: node-exporter
+  namespace: monitoring
+  labels:
+    app: node-exporter
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  endpoints:
+    - port: metrics
+      interval: 15s

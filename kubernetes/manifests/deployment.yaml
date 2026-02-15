@@ -70,14 +70,14 @@ spec:
               containerPort: 8000
               protocol: TCP
 
-          # Resource Management
+          # Resource Management (Phase 05 optimized)
           resources:
             requests:
-              cpu: 500m
-              memory: 1Gi
+              cpu: 250m
+              memory: 256Mi
             limits:
-              cpu: 1000m
-              memory: 2Gi
+              cpu: 500m
+              memory: 512Mi
 
           # Environment Variables
           env:
@@ -305,11 +305,11 @@ spec:
 
           resources:
             requests:
-              cpu: 500m
-              memory: 1Gi
+              cpu: 250m
+              memory: 256Mi
             limits:
-              cpu: 1000m
-              memory: 2Gi
+              cpu: 500m
+              memory: 512Mi
 
           env:
             - name: ENVIRONMENT

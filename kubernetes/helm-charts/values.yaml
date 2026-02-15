@@ -18,14 +18,14 @@ image:
 # Container Port
 port: 8000
 
-# Resource Requests & Limits
+# Resource Requests & Limits (Phase 05 optimized for HPA)
 resources:
   requests:
-    cpu: 500m
-    memory: 1Gi
+    cpu: 250m
+    memory: 256Mi
   limits:
-    cpu: 1000m
-    memory: 2Gi
+    cpu: 500m
+    memory: 512Mi
 
 # Environment Configuration
 env:
@@ -126,13 +126,13 @@ ingress:
       hosts:
         - detection-api.internal.example.com
 
-# Horizontal Pod Autoscaler (Phase 2)
+# Horizontal Pod Autoscaler (Phase 05)
 autoscaling:
-  enabled: false  # Disabled for MVP
-  minReplicas: 3
+  enabled: true  # Enabled for production
+  minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
-  targetMemoryUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 80
 
 # Prometheus Monitoring
 monitoring:
