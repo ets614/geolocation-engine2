@@ -19,6 +19,12 @@ class Config:
             "TAK_SERVER_URL",
             "http://localhost:8080/CoT"
         )
+        self.jwt_secret_key: str = os.getenv(
+            "JWT_SECRET_KEY",
+            "your-secret-key-change-in-production"
+        )
+        self.jwt_algorithm: str = "HS256"
+        self.jwt_expiration_minutes: int = 60
 
 
 def get_config() -> Config:
