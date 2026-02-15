@@ -154,7 +154,7 @@ Feature: Accept JSON Detection Input
     Then the response status is 202 Accepted
     And coordinates are preserved with full precision
     And no rounding errors occur in storage or output
-    And GeoJSON output maintains precision
+    And CoT XML output preserves coordinate precision
 
   @logging
   Scenario: Ingestion events are logged for audit trail

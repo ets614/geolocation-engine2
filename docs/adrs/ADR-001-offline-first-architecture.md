@@ -10,12 +10,12 @@
 
 ## Context
 
-The system must deliver detections to TAK/ATAK/COP platforms when field operators have intermittent or unreliable network connectivity. Current systems fail 20-30% of the time due to network outages, forcing operators to manually screenshot detections and manually enter them into the COP (Interview 4).
+The system must deliver detections to TAK/ATAK in Cursor on Target (CoT) XML format when field operators have intermittent or unreliable network connectivity. Current systems fail 20-30% of the time due to network outages, forcing operators to manually screenshot detections and manually enter them into the tactical map (Interview 4).
 
 Two architectural approaches were considered:
 
-1. **Remote-First with Local Fallback**: Attempt remote write first, queue locally only if it fails
-2. **Offline-First with Automatic Sync**: Always write to local queue first, sync to remote asynchronously
+1. **Remote-First with Local Fallback**: Attempt remote TAK push first, queue locally only if it fails
+2. **Offline-First with Automatic Sync**: Always write to local queue first, sync CoT XML to TAK asynchronously
 
 ---
 
@@ -23,19 +23,19 @@ Two architectural approaches were considered:
 
 We will implement **Offline-First architecture** where:
 
-1. All detections are written to local SQLite queue immediately upon validation
-2. System attempts to sync to remote TAK/ArcGIS system asynchronously
-3. When network is unavailable, system continues operating normally
-4. When network is restored, system automatically syncs all queued detections
-5. Operator sees no disruption during offline/sync cycle
+1. All detections are written to local SQLite queue immediately upon geolocation calculation
+2. System generates CoT XML and attempts to sync to TAK Server asynchronously via HTTP PUT
+3. When network is unavailable, system continues operating normally with local queue
+4. When network is restored, system automatically syncs all queued CoT XML detections to TAK
+5. Operator sees no disruption during offline/sync cycle; detections appear on map when TAK reconnects
 
 **Data Flow**:
 ```
-Detection → Validate → Write to Queue (local) → Attempt Remote Sync
-                                    ↓
-                          If sync fails → Queue persists
-                          If sync succeeds → Mark SYNCED
-                          On reconnect → Auto-retry sync
+Detection → Photogrammetry → CoT XML → Write to Queue (local) → Attempt TAK Push
+                                                       ↓
+                                 If push fails → Queue persists
+                                 If push succeeds → Mark SYNCED
+                                 On TAK reconnect → Auto-retry sync
 ```
 
 ---
@@ -192,8 +192,8 @@ async def monitor_connectivity():
 
 ## Related Decisions
 
-- **ADR-005**: SQLite for MVP persistence layer
-- **ADR-004**: GeoJSON RFC 7946 standard (enables multi-platform compatibility)
+- **ADR-005**: Cursor on Target (CoT) XML Format for TAK Systems (primary output format)
+- **ADR-004**: [DEPRECATED] GeoJSON RFC 7946 standard (superseded by ADR-005)
 
 ---
 

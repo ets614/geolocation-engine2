@@ -1,198 +1,187 @@
-@feature_us003
-Feature: Translate to GeoJSON Format
+@feature_cot_generation
+Feature: Generate CoT XML Format for TAK
   As an integration specialist
-  I want detections transformed to standardized GeoJSON format
-  So that output works with TAK, ArcGIS, and standard COP systems
+  I want detections transformed to Cursor on Target (CoT) XML format
+  So that output works seamlessly with TAK and ATAK command maps
 
   Background:
-    Given the format translation service is running
-    And output format is RFC 7946 compliant GeoJSON
-    And transformation latency must be <100ms
+    Given the CoT service is running
+    And output format is valid ATAK CoT XML
+    And CoT generation latency must be <5ms
 
   @happy_path @smoke
-  Scenario: Convert validated detection to GeoJSON Feature
-    Given a validated fire detection with fields:
-      | field                | value                    |
-      | detection_id         | det-12345-abc            |
-      | source               | satellite_fire_api       |
-      | latitude             | 32.1234                  |
-      | longitude            | -117.5678                |
-      | confidence           | 0.85                     |
-      | confidence_original  | {value: 85, scale: 0-100}|
-      | accuracy_meters      | 200                      |
-      | accuracy_flag        | GREEN                    |
-      | type                 | fire                     |
-      | timestamp            | 2026-02-17T14:35:42Z     |
-      | received_at          | 2026-02-17T14:35:43Z     |
-    When format translation to GeoJSON runs
-    Then output is valid GeoJSON Feature (RFC 7946 compliant)
-    And geometry is structured correctly:
-      | field          | value                    |
-      | type           | Point                    |
-      | coordinates    | [-117.5678, 32.1234]     |
-    And properties include all required fields:
-      | property              | value                    |
-      | source                | satellite_fire_api       |
-      | confidence            | 0.85                     |
-      | accuracy_m            | 200                      |
-      | accuracy_flag         | GREEN                    |
-      | type                  | fire                     |
-      | timestamp             | 2026-02-17T14:35:42Z     |
-    And output is parseable by standard GeoJSON parsers
-    And transformation latency is <100ms
+  Scenario: Convert validated detection to CoT XML
+    Given a validated vehicle detection with fields:
+      | field                    | value                    |
+      | detection_id             | det-12345-abc            |
+      | object_class             | vehicle                  |
+      | calculated_latitude      | 32.1234                  |
+      | calculated_longitude     | -117.5678                |
+      | confidence_flag          | GREEN                    |
+      | uncertainty_radius_m     | 200                      |
+      | ai_confidence            | 0.92                     |
+      | camera_id                | cam-001                  |
+      | timestamp                | 2026-02-15T14:35:42Z     |
+    When CoT generation runs
+    Then output is valid CoT XML (TAK-compatible schema)
+    And event element has correct attributes:
+      | attribute    | value                    |
+      | version      | 2.0                      |
+      | uid          | Detection.det-12345-abc  |
+      | type         | b-m-p-s-u-c              |
+    And point element contains coordinates:
+      | field        | value                    |
+      | lat          | 32.1234                  |
+      | lon          | -117.5678                |
+      | ce           | 200                      |
+    And detail element includes metadata:
+      | element      | expected_value           |
+      | color value  | -65536                   |
+      | remarks text | Vehicle at 92% confidence|
+    And TAK Server can parse and display CoT XML
 
   @happy_path @milestone_1
-  Scenario: Handle multiple source formats consistently
-    Given detections from three different source formats:
-      | source    | input_format | detection_data           |
-      | uav_1     | {lat, lon, conf, ts} | UAV ground control output |
-      | satellite | {latitude, longitude, confidence_0_100, timestamp} | Satellite API response |
-      | camera_47 | camera_id registry | CCTV detection + location lookup |
-    When each detection is transformed to GeoJSON
-    Then all three produce valid GeoJSON Features
-    And all use same coordinate system: WGS84 [longitude, latitude]
-    And all use same confidence scale: 0-1 normalized
-    And geometry structure is identical across all sources
-    And properties structure is consistent across all sources
-    And operator sees uniform data regardless of source
+  Scenario: Handle multiple detection types correctly
+    Given detections from three different classes:
+      | object_class | cot_type_code         | expected_symbol      |
+      | vehicle      | b-m-p-s-u-c           | Blue vehicle marker  |
+      | person       | b-m-p-s-p-w-g         | Blue walking person  |
+      | aircraft     | b-m-p-a               | Blue air platform    |
+    When each detection is transformed to CoT
+    Then all three produce valid CoT XML
+    And type codes match ATAK hierarchy:
+      | class    | type_code       |
+      | vehicle  | b-m-p-s-u-c     |
+      | person   | b-m-p-s-p-w-g   |
+      | aircraft | b-m-p-a         |
+    And ATAK client renders each with correct symbology
 
-  @normalization @critical
-  Scenario: Confidence scales are normalized correctly
-    Given detections with confidence in different scales:
-      | source   | input_value | input_scale | expected_output |
-      | uav      | 0.89        | 0-1 scale   | 0.89            |
-      | satellite| 92          | 0-100 scale | 0.92            |
-      | camera   | 78          | 0-100 scale | 0.78            |
-      | radar    | 85%         | percentage  | 0.85            |
-    When format translation normalizes confidence
-    Then UAV confidence 0.89 → normalized 0.89 (unchanged)
-    And satellite confidence 92 → normalized 0.92 (divide by 100)
-    And camera confidence 78 → normalized 0.78 (divide by 100)
-    And radar confidence 85% → normalized 0.85 (divide by 100)
-    And all are output in 0-1 scale (standard)
-    And original values preserved in confidence_original field:
-      | detection | confidence_original       |
-      | uav       | {value: 0.89, scale: "0-1"} |
-      | satellite | {value: 92, scale: "0-100"} |
-      | camera    | {value: 78, scale: "0-100"} |
-      | radar     | {value: 85%, scale: "percent"} |
+  @confidence_mapping @critical
+  Scenario: Confidence flags map to color codes correctly
+    Given detections with different confidence levels:
+      | geolocation_confidence | expected_flag | expected_color | expected_hex |
+      | 0.85                   | GREEN         | green circle   | -65536       |
+      | 0.60                   | YELLOW        | yellow circle  | -256         |
+      | 0.35                   | RED           | red circle     | -16711936    |
+    When CoT generation maps confidence to colors
+    Then GREEN confidence (>0.75) → color value -65536 (red in BGR)
+    And YELLOW confidence (0.4-0.75) → color value -256 (green in BGR)
+    And RED confidence (<0.4) → color value -16711936 (blue in BGR)
+    And TAK operators see correct confidence circles on map
 
   @accuracy_preservation
-  Scenario: Accuracy metadata is preserved and validated
-    Given a detection with accuracy metadata:
-      | field              | value           |
-      | accuracy_meters    | 180             |
-      | accuracy_flag      | YELLOW          |
-      | gps_pdop           | 4.5             |
-      | satellite_count    | 8               |
-    When format translation builds GeoJSON
-    Then accuracy_m field includes: 180
-    And accuracy_flag included in properties
-    And additional metadata preserved in properties:
-      | property           | value           |
-      | gps_pdop           | 4.5             |
-      | satellite_count    | 8               |
-    And all accuracy data survives round-trip validation
+  Scenario: Accuracy metadata is preserved as CEP
+    Given a detection with photogrammetry uncertainty:
+      | field                    | value           |
+      | uncertainty_radius_m     | 180             |
+      | confidence_flag          | YELLOW          |
+      | ai_confidence            | 0.78            |
+      | camera_elevation_m       | 500             |
+    When CoT generation builds XML
+    Then CEP (ce attribute) includes: 180 meters
+    And accuracy circle displayed on TAK map
+    And color reflects YELLOW confidence
+    And remarks include accuracy details: "Accuracy: ±180.0m"
+    And all accuracy data survives TAK parsing
 
-  @rfc7946_compliance @critical
-  Scenario: Output is RFC 7946 compliant GeoJSON
-    Given a validated fire detection
-    When format translation produces GeoJSON output
-    Then GeoJSON structure matches RFC 7946 specification:
+  @tak_compatibility @critical
+  Scenario: Output is TAK-compatible CoT XML
+    Given a validated detection
+    When CoT generation produces XML output
+    Then CoT structure follows ATAK schema:
       | element          | requirement                    |
-      | type             | "Feature"                      |
-      | geometry         | Point geometry present         |
-      | geometry.type    | "Point"                        |
-      | geometry.coordinates | [lon, lat] format          |
-      | properties       | Object with detection data     |
-      | crs              | Not included (WGS84 default)   |
-    And GeoJSON can be validated by standard RFC 7946 validators
-    And GeoJSON can be parsed by GeoJSON.io and QGIS
-    And GeoJSON can be imported to TAK Server
-    And GeoJSON can be imported to ArcGIS
+      | event            | version 2.0, uid, type, time   |
+      | point            | lat, lon, ce (accuracy)        |
+      | detail           | link, color, remarks, contact  |
+      | link             | uid (camera), type (a-f-G-E-S)|
+      | color            | value (hex color code)         |
+      | remarks          | human-readable detection info  |
+      | contact          | callsign for operator          |
+    And CoT can be parsed by standard TAK parsers
+    And CoT can be imported to TAK Server
+    And CoT displays on ATAK client map
 
   @audit_trail
-  Scenario: Transformation includes audit metadata
+  Scenario: CoT generation includes audit metadata
     Given a detection being transformed
-    When format translation completes
-    Then GeoJSON includes audit metadata:
-      | field                 | example                   |
-      | received_timestamp    | 2026-02-17T14:35:43Z      |
-      | processed_at          | 2026-02-17T14:35:44Z      |
-      | sync_status           | SYNCED                    |
-      | operator_verified     | false / true (if manual)  |
-      | operator_notes        | null / "operator input"   |
-    And metadata enables full audit trail reconstruction
+    When CoT generation completes
+    Then CoT remarks include audit metadata:
+      | field                    | example                   |
+      | object_class             | Vehicle                   |
+      | ai_confidence            | AI Confidence: 92%        |
+      | geo_confidence           | Geo Confidence: GREEN     |
+      | accuracy                 | Accuracy: ±200.0m         |
+    And timestamp shows when detection was created
+    And camera source is linked in detail.link
+    And metadata enables full detection chain reconstruction
 
   @multi_source @integration
-  Scenario: Multi-source detections maintain consistency
+  Scenario: Multi-source detections map to CoT consistently
     Given a scenario with 3 detections from different sources:
-      | #  | source    | confidence | accuracy | flag   |
-      | 1  | uav       | 0.92       | 50m      | GREEN  |
-      | 2  | satellite | 0.78       | 180m     | YELLOW |
-      | 3  | camera    | 0.85       | 100m     | GREEN  |
-    When all three are transformed to GeoJSON
-    Then GeoJSON array is produced with 3 Feature objects
-    And each Feature has identical structure
-    And coordinate systems are all WGS84
-    And confidence scales all 0-1
-    And accuracy flags displayed consistently
-    And operator can view all three on same map without confusion
+      | #  | source    | object_class | confidence | accuracy | flag   |
+      | 1  | uav       | vehicle      | 0.92       | 50m      | GREEN  |
+      | 2  | satellite | fire         | 0.78       | 180m     | YELLOW |
+      | 3  | camera    | person       | 0.85       | 100m     | GREEN  |
+    When all three are transformed to CoT
+    Then each produces valid CoT XML with correct type code
+    And coordinate systems all use WGS84 (lat/lon)
+    And confidence flags all map correctly to colors
+    And accuracy (ce) all reflected in CEP circles
+    And operator can view all three on TAK map with correct symbology
 
   @edge_case
   Scenario: Extremely precise coordinates are preserved
-    Given a detection with high-precision coordinates:
-      | field              | value           |
-      | latitude           | 32.123456789    |
-      | longitude          | -117.567890123  |
-      | accuracy_meters    | 0.5             |
-    When format translation runs
-    Then GeoJSON coordinates preserve precision
+    Given a detection with high-precision geolocation:
+      | field                    | value           |
+      | calculated_latitude      | 32.123456789    |
+      | calculated_longitude     | -117.567890123  |
+      | uncertainty_radius_m     | 0.5             |
+    When CoT generation runs
+    Then CoT coordinates preserve precision
     And coordinates are not rounded or truncated
-    And GeoJSON output: [-117.567890123, 32.123456789]
+    And CoT output: <point lat="32.123456789" lon="-117.567890123" ce="0.5"/>
     And no floating-point precision loss occurs
 
   @performance @sla
-  Scenario: Transformation meets latency SLA
+  Scenario: CoT generation meets latency SLA
     Given a batch of 100 validated detections
-    When all are transformed to GeoJSON
-    Then each transformation <100ms
-    And average latency <50ms
-    And p99 latency <100ms
+    When all are transformed to CoT XML
+    Then each generation <5ms
+    And average latency <3ms
+    And p99 latency <5ms
     And system remains responsive
-    And no transformations timeout or fail
+    And no CoT generations timeout or fail
 
-  @compatibility
-  Scenario: Output is compatible with TAK Server
-    Given a GeoJSON Feature from our system
-    When sent to TAK Server subscription endpoint
-    Then TAK Server accepts the GeoJSON
-    And detection appears on TAK map
-    And properties are displayed in TAK UI
-    And accuracy flag is visible to operators
-    And confidence is displayed
-    And timestamp is displayed correctly
+  @remarks_quality
+  Scenario: Remarks field provides complete detection summary
+    Given a complex detection with:
+      | field                    | value                    |
+      | object_class             | vehicle                  |
+      | ai_confidence            | 0.92                     |
+      | confidence_flag          | GREEN                    |
+      | uncertainty_radius_m     | 150                      |
+    When CoT is generated
+    Then remarks text includes all required fields:
+      | field           | example pattern              |
+      | class           | "AI Detection: Vehicle"      |
+      | ai_confidence   | "AI Confidence: 92%"         |
+      | geo_confidence  | "Geo Confidence: GREEN"      |
+      | accuracy        | "Accuracy: ±150.0m"          |
+    And remarks are human-readable for TAK operators
+    And remarks fit within CoT XML text length limits
 
-  @compatibility
-  Scenario: Output is compatible with ArcGIS
-    Given a GeoJSON Feature from our system
-    When imported to ArcGIS as feature service input
-    Then ArcGIS accepts the GeoJSON without errors
-    And feature appears on map at correct coordinates
-    And properties are available in feature attributes
-    And symbology can be based on accuracy_flag
-    And popup displays all metadata
+  @type_code_mapping
+  Scenario: Object class to type code mapping is comprehensive
+    Given all supported object classes:
+      | object_class    | cot_type_code      | description              |
+      | vehicle         | b-m-p-s-u-c        | Civilian vehicle         |
+      | armed_vehicle   | b-m-p-s-u-c-v-a    | Armed vehicle variant    |
+      | person          | b-m-p-s-p-w-g      | Ground walking person    |
+      | aircraft        | b-m-p-a            | Air platform             |
+      | fire            | b-i-x-f-f          | Fire/building            |
+      | unknown         | b-m-p-s-p-loc      | Generic point of interest|
+    When each is transformed to CoT
+    Then all produce correct type codes
+    And ATAK symbology displays correctly for each
+    And operators see expected icons and colors
 
-  @compliance
-  Scenario: Transformation audit trail is complete
-    Given a detection undergoing transformation
-    When format translation completes
-    Then audit trail records:
-      | event                  | details                   |
-      | transform_started      | timestamp, detection_id   |
-      | confidence_normalized  | original scale, method    |
-      | geojson_built          | geometry, properties      |
-      | transform_completed    | timestamp, latency_ms     |
-    And all transformation logic is logged
-    And normalization methods are documented
-    And failures are captured with error details
