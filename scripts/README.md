@@ -11,19 +11,20 @@ Scripts to maintain and share project progress documentation with automatic PDF 
 
 **Usage:**
 ```bash
-# Generate PDF with default paths
+# Generate PDF (auto-runs after every commit via post-commit hook)
 python3 scripts/progress_generator.py
 
 # Generate with custom paths
 python3 scripts/progress_generator.py <markdown-file> <output-pdf>
 
 # Examples:
-python3 scripts/progress_generator.py docs/feature/ai-detection-cop-integration/PROGRESS.md /tmp/report.pdf
+python3 scripts/progress_generator.py docs/feature/ai-detection-cop-integration/PROGRESS.md docs/feature/ai-detection-cop-integration/PROGRESS.pdf
 ```
 
 **Output:**
-- Default: `/tmp/AI_Detection_CoP_Progress.pdf`
-- ~5-8 KB, ready to share
+- Default: `docs/feature/ai-detection-cop-integration/PROGRESS.pdf`
+- In repository, version-controlled, always current
+- ~5-8 KB, ready to share from repo
 
 ### `update_progress.sh`
 **Purpose:** Update PROGRESS.md and generate PDF in one command
@@ -60,16 +61,21 @@ python3 scripts/progress_generator.py docs/feature/ai-detection-cop-integration/
 
 **View Latest:**
 - Markdown: `docs/feature/ai-detection-cop-integration/PROGRESS.md`
-- PDF: Run `python3 scripts/progress_generator.py`
+- PDF: `docs/feature/ai-detection-cop-integration/PROGRESS.pdf`
+- Both auto-generated after every commit via git hook
 
 ## Examples
 
 ```bash
-# Update progress and generate PDF
+# PDF auto-generates after commit (post-commit hook)
+git commit -m "your change"
+# → PDF automatically updated in repo
+
+# Manual generation if needed
 python3 scripts/progress_generator.py
 
-# Share the PDF with others
-# File location: /tmp/AI_Detection_CoP_Progress.pdf
+# PDF is always in repo, version-controlled
+# Located at: docs/feature/ai-detection-cop-integration/PROGRESS.pdf
 ```
 
 ## Dependencies
