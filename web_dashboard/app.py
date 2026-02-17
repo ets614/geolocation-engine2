@@ -4,7 +4,7 @@ Geolocation Engine 2 - Web Dashboard
 Beautiful UI for visualizing feeds → detections → CoT XML
 """
 from fastapi import FastAPI, WebSocket, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
@@ -14,8 +14,12 @@ import numpy as np
 from datetime import datetime
 from pathlib import Path
 import httpx
+from worker import WorkerManager
 
 app = FastAPI(title="Geolocation Engine Dashboard")
+
+# Initialize worker manager
+worker_manager = WorkerManager(geolocation_url="http://localhost:8000")
 
 # CORS for frontend
 app.add_middleware(
@@ -450,9 +454,14 @@ async def get_dashboard():
                             </div>
                         </div>
 
-                        <button class="button" onclick="startFeed()" style="margin-top: auto;">
-                            ▶️ Start Processing
-                        </button>
+                        <div style="display: flex; gap: 10px; margin-top: auto;">
+                            <button class="button" onclick="startFeed()" style="flex: 1;">
+                                ▶️ Start Live Feed
+                            </button>
+                            <button class="button" onclick="stopFeed()" style="flex: 1; background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);">
+                                ⏹️ Stop
+                            </button>
+                        </div>
 
                         <div class="stats">
                             <div class="stat">
@@ -562,28 +571,92 @@ async def get_dashboard():
                 updateStats();
             }
 
-            function startFeed() {
+            let currentAdapterId = null;
+            let eventSource = null;
+
+            async function startFeed() {
                 if (!currentFeed) {
                     alert('Please select a feed first');
                     return;
                 }
 
-                document.getElementById('stream-status').textContent = 'Processing...';
-                document.getElementById('video-content').innerHTML = '🎬<br><small>Processing feed...</small>';
-                document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+                currentAdapterId = document.getElementById('feed-select').value;
 
-                // Simulate processing
-                setTimeout(() => {
-                    addDetection({
-                        class: 'landmark',
-                        confidence: 0.85 + Math.random() * 0.15,
-                        id: 'DET-' + Date.now(),
-                        timestamp: new Date().toISOString()
-                    });
+                document.getElementById('stream-status').textContent = 'Starting...';
+                document.getElementById('video-content').innerHTML = '🎬<br><small>Connecting...</small>';
 
-                    document.getElementById('stream-status').textContent = 'Active';
-                    generateCoT();
-                }, 1000);
+                try {
+                    // Start the adapter on the backend
+                    const response = await fetch(`/api/adapter/${currentAdapterId}/start`, { method: 'POST' });
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        document.getElementById('stream-status').textContent = 'Active ✓';
+                        document.getElementById('video-content').innerHTML = '🎥<br><small>LIVE FEED</small>';
+
+                        // Connect to event stream
+                        connectToEventStream();
+                    } else {
+                        alert('Error starting adapter: ' + result.detail);
+                        document.getElementById('stream-status').textContent = 'Error';
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error: ' + error.message);
+                    document.getElementById('stream-status').textContent = 'Error';
+                }
+            }
+
+            function connectToEventStream() {
+                // Close existing connection if any
+                if (eventSource) eventSource.close();
+
+                eventSource = new EventSource('/api/detections/stream');
+
+                eventSource.onmessage = (event) => {
+                    if (event.data === '') return; // Heartbeat
+
+                    try {
+                        const detection = JSON.parse(event.data);
+
+                        // Only add if this is from current adapter
+                        if (detection.adapter_id === currentAdapterId) {
+                            document.getElementById('last-update').textContent = new Date(detection.timestamp).toLocaleTimeString();
+
+                            if (detection.status === 'success') {
+                                addDetection({
+                                    class: detection.ai_confidence > 0.9 ? 'landmark' : 'landmark',
+                                    confidence: detection.ai_confidence,
+                                    id: detection.detection_id || 'DET-' + Date.now(),
+                                    timestamp: detection.timestamp,
+                                    confidence_flag: detection.confidence_flag,
+                                    cot_xml: detection.cot_xml
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        console.log('Event parse:', e);
+                    }
+                };
+
+                eventSource.onerror = (error) => {
+                    console.error('EventSource error:', error);
+                    document.getElementById('stream-status').textContent = 'Disconnected';
+                };
+            }
+
+            async function stopFeed() {
+                if (currentAdapterId && eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+
+                    try {
+                        await fetch(`/api/adapter/${currentAdapterId}/stop`, { method: 'POST' });
+                        document.getElementById('stream-status').textContent = 'Stopped';
+                    } catch (error) {
+                        console.error('Error stopping feed:', error);
+                    }
+                }
             }
 
             function addDetection(detection) {
@@ -592,15 +665,15 @@ async def get_dashboard():
 
                 const confidenceClass = detection.confidence > 0.9 ? 'confidence-green' :
                                        detection.confidence > 0.75 ? 'confidence-yellow' : 'confidence-red';
-                const confidenceText = detection.confidence > 0.9 ? 'GREEN' :
-                                      detection.confidence > 0.75 ? 'YELLOW' : 'RED';
+                const confidenceText = detection.confidence_flag || (detection.confidence > 0.9 ? 'GREEN' :
+                                      detection.confidence > 0.75 ? 'YELLOW' : 'RED');
 
                 const html = `
                     <li class="detection-item">
                         <div class="detection-class">🎯 ${detection.class}</div>
                         <div style="margin-top: 5px; font-size: 0.85em; color: #666;">
                             <strong>ID:</strong> ${detection.id.substring(0, 12)}...<br>
-                            <strong>Pixel:</strong> (${Math.floor(Math.random() * 1920)}, ${Math.floor(Math.random() * 1440)})
+                            <strong>Time:</strong> ${new Date(detection.timestamp).toLocaleTimeString()}
                         </div>
                         <span class="detection-confidence ${confidenceClass}">
                             ${confidenceText} ${(detection.confidence * 100).toFixed(0)}%
@@ -614,61 +687,39 @@ async def get_dashboard():
                 }
                 list.insertAdjacentHTML('afterbegin', html);
 
+                // Show CoT if available
+                if (detection.cot_xml) {
+                    displayCoT(detection.cot_xml);
+                }
+
                 // Keep only last 10
                 while (list.children.length > 10) {
                     list.removeChild(list.lastChild);
                 }
             }
 
-            function generateCoT() {
+            function displayCoT(xml) {
                 cotCount++;
                 updateStats();
 
-                const timestamp = new Date().toISOString();
-                const lat = currentFeed.lat;
-                const lon = currentFeed.lon;
-
-                const cotXml = `<?xml version="1.0" encoding="UTF-8"?>
-<event version="2.0"
-       uid="Detection.${Date.now()}"
-       type="b-m-p-s-u-c"
-       time="${timestamp}"
-       start="${timestamp}"
-       stale="${new Date(Date.now() + 300000).toISOString()}">
-    <point lat="${lat.toFixed(6)}"
-           lon="${lon.toFixed(6)}"
-           hae="0.0"
-           ce="32.92"
-           le="9999999.0" />
-    <detail>
-        <contact callsign="Detection-${cotCount}" />
-        <archive />
-        <color value="-1" />
-        <link uid="user-1"
-              production_time="${timestamp}"
-              type="a-f-G-E-S-C"
-              parent_callsign="Geolocation-Engine2"
-              relation="p-b" />
-    </detail>
-</event>`;
-
-                const formatted = cotXml.split('\n').map(line => {
+                const formatted = xml.split('\\n').map(line => {
                     let html = line
                         .replace(/&/g, '&amp;')
                         .replace(/</g, '&lt;')
                         .replace(/>/g, '&gt;');
 
                     // Syntax highlighting
-                    html = html.replace(/(&lt;\?[\w\s=".:\/\-]*\?&gt;)/g, '<span class="cot-tag">$1</span>');
-                    html = html.replace(/(&lt;\/?\w+)/g, '<span class="cot-tag">$1</span>');
-                    html = html.replace(/(\w+)=/g, '<span class="cot-attr">$1</span>=');
+                    html = html.replace(/(&lt;\\?[\w\\s=".:\/\\-]*\\?&gt;)/g, '<span class="cot-tag">$1</span>');
+                    html = html.replace(/(&lt;\\/?\w+)/g, '<span class="cot-tag">$1</span>');
+                    html = html.replace(/(\\w+)=/g, '<span class="cot-attr">$1</span>=');
                     html = html.replace(/="([^"]*)"/g, '=<span class="cot-value">"$1"</span>');
 
                     return html;
-                }).join('\n');
+                }).join('\\n');
 
                 document.getElementById('cot-output').innerHTML = formatted;
             }
+
 
             function updateStats() {
                 document.getElementById('detection-count').textContent = detectionCount;
@@ -761,6 +812,78 @@ async def process_feed(feed_id: str, num_frames: int = 3):
         "detections": detections,
         "count": len(detections)
     }
+
+
+@app.post("/api/adapter/{adapter_id}/start")
+async def start_adapter(adapter_id: str):
+    """Start a live adapter feed"""
+    try:
+        worker = await worker_manager.start_adapter(adapter_id)
+        return {
+            "status": "started",
+            "adapter_id": adapter_id,
+            "adapter_name": worker.adapter_config["name"],
+            "message": f"Processing {worker.adapter_config['name']} feed..."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/adapter/{adapter_id}/stop")
+async def stop_adapter(adapter_id: str):
+    """Stop a live adapter feed"""
+    try:
+        await worker_manager.stop_adapter(adapter_id)
+        return {
+            "status": "stopped",
+            "adapter_id": adapter_id,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/adapter/{adapter_id}/status")
+async def adapter_status(adapter_id: str):
+    """Get status of an adapter"""
+    status = worker_manager.get_worker_status(adapter_id)
+    return status
+
+
+@app.get("/api/adapters/status")
+async def all_adapters_status():
+    """Get status of all adapters"""
+    statuses = {}
+    for adapter_id in worker_manager.workers.keys():
+        statuses[adapter_id] = worker_manager.get_worker_status(adapter_id)
+    return statuses
+
+
+async def detection_event_generator():
+    """Server-Sent Events stream of detections"""
+    while True:
+        try:
+            # Wait for detection with timeout
+            detection = await asyncio.wait_for(
+                worker_manager.detection_queue.get(), timeout=1.0
+            )
+            yield f"data: {json.dumps(detection)}\n\n"
+        except asyncio.TimeoutError:
+            # Keep connection alive with heartbeat
+            yield ": heartbeat\n\n"
+
+
+@app.get("/api/detections/stream")
+async def detections_stream():
+    """Stream detections from active adapters"""
+    return StreamingResponse(
+        detection_event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 if __name__ == "__main__":
