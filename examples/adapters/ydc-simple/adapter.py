@@ -126,8 +126,8 @@ class YDCAdapter:
 if __name__ == "__main__":
     # Configure here
     adapter = YDCAdapter(
-        ydc_url="ws://localhost:5173/api/detections",  # YDC WebSocket endpoint
-        geolocation_url="http://localhost:8001",       # Geolocation-Engine2 API
+        ydc_url="ws://localhost:5173",                 # YDC WebSocket endpoint
+        geolocation_url="http://localhost:8000",       # Geolocation-Engine2 API
         camera_lat=40.7135,    # Your location (NYC example)
         camera_lon=-74.0050,
         camera_elevation=50.0,
