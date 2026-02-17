@@ -380,6 +380,28 @@ async def get_dashboard():
                 color: #ce9178;
             }
 
+            .json-key {
+                color: #9cdcfe;
+                font-weight: 600;
+            }
+
+            .json-string {
+                color: #ce9178;
+            }
+
+            .json-number {
+                color: #b5cea8;
+            }
+
+            .json-boolean {
+                color: #569cd6;
+            }
+
+            .json-null {
+                color: #569cd6;
+                font-style: italic;
+            }
+
             .empty-state {
                 text-align: center;
                 color: #999;
@@ -587,6 +609,23 @@ async def get_dashboard():
                                 <small>Start a feed to see detections</small>
                             </div>
                         </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Full-Width Detection Object Panel -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span>🔍</span>
+                    <span>Raw Detection Object (JSON)</span>
+                </div>
+                <div class="panel-body">
+                    <div class="cot-xml" id="detection-object-output">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📭</div>
+                            <div>No detection object received yet</div>
+                            <small>Start a feed to see raw detection data</small>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -856,6 +895,9 @@ async def get_dashboard():
                 }
                 list.insertAdjacentHTML('afterbegin', html);
 
+                // Display raw detection object
+                displayDetectionObject(detection);
+
                 // Show CoT if available
                 if (detection.cot_xml) {
                     displayCoT(detection.cot_xml);
@@ -865,6 +907,39 @@ async def get_dashboard():
                 while (list.children.length > 10) {
                     list.removeChild(list.lastChild);
                 }
+            }
+
+            function syntaxHighlightJSON(json, key = '') {
+                json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+                    var cls = 'number';
+                    if (/^"/.test(match)) {
+                        if (/:$/.test(match)) {
+                            cls = 'key';
+                        } else {
+                            cls = 'string';
+                        }
+                    } else if (/true|false/.test(match)) {
+                        cls = 'boolean';
+                    } else if (/null/.test(match)) {
+                        cls = 'null';
+                    }
+                    return '<span class="json-' + cls + '">' + match + '</span>';
+                });
+            }
+
+            function displayDetectionObject(detection) {
+                // Create a clean object for display (exclude large base64 image data)
+                const displayObj = {
+                    ...detection,
+                    image_base64: detection.image_base64 ? '[base64 image data - ' + detection.image_base64.length + ' bytes]' : undefined
+                };
+
+                const formattedJSON = JSON.stringify(displayObj, null, 2);
+                const highlighted = syntaxHighlightJSON(formattedJSON);
+
+                const outputDiv = document.getElementById('detection-object-output');
+                outputDiv.innerHTML = '<pre style="margin: 0;">' + highlighted + '</pre>';
             }
 
             function displayCoT(xml) {
