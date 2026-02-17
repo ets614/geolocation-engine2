@@ -19,10 +19,6 @@ from worker import WorkerManager
 
 # Import AI adapters
 try:
-    from adapters.huggingface import HuggingFaceDetector
-except (ImportError, ValueError):
-    HuggingFaceDetector = None
-try:
     from adapters.roboflow import RoboflowDetector
 except (ImportError, ValueError):
     RoboflowDetector = None
@@ -1403,7 +1399,7 @@ async def simulator_submit(data: SimulatorRequest):
 
     return {
         "status": "success",
-        "message": f"Processed {len(processed)} real AI detections from HuggingFace",
+        "message": f"Processed {len(processed)} AI detections",
         "location": {
             "latitude": latitude,
             "longitude": longitude,
