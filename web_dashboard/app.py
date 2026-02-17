@@ -163,6 +163,7 @@ async def get_dashboard():
                 overflow: hidden;
                 display: flex;
                 flex-direction: column;
+                min-height: 300px;
             }
 
             .panel-header {
@@ -222,11 +223,14 @@ async def get_dashboard():
                 margin-bottom: 15px;
                 font-size: 0.95em;
                 color: #666;
+                overflow: visible;
+                word-wrap: break-word;
             }
 
             .feed-info-item {
                 display: flex;
-                justify-content: space-between;
+                flex-direction: column;
+                gap: 4px;
                 margin-bottom: 8px;
             }
 
@@ -243,6 +247,8 @@ async def get_dashboard():
                 color: #667eea;
                 font-family: 'Courier New', monospace;
                 font-weight: 500;
+                word-break: break-word;
+                overflow-wrap: break-word;
             }
 
             .video-container {
@@ -276,6 +282,8 @@ async def get_dashboard():
                 margin-bottom: 10px;
                 border-left: 4px solid #667eea;
                 font-size: 0.9em;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
             }
 
             .detection-item:last-child {
@@ -285,6 +293,7 @@ async def get_dashboard():
             .detection-class {
                 font-weight: 600;
                 color: #333;
+                word-break: break-word;
             }
 
             .detection-confidence {
