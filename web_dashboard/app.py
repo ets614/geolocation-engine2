@@ -298,9 +298,11 @@ async def get_dashboard():
                 font-family: 'Courier New', monospace;
                 font-size: 0.85em;
                 overflow-x: auto;
-                max-height: 350px;
+                max-height: 500px;
                 overflow-y: auto;
-                line-height: 1.4;
+                line-height: 1.5;
+                white-space: pre-wrap;
+                word-wrap: break-word;
             }
 
             .cot-tag {
@@ -488,11 +490,22 @@ async def get_dashboard():
                             <div id="video-content" class="video-placeholder">
                                 📹<br><small>No feed selected</small>
                             </div>
+                            <canvas id="video-canvas" style="display: none; max-width: 100%;"></canvas>
                         </div>
-                        <div style="font-size: 0.9em; color: #666;">
-                            <strong>Stream Status:</strong> <span id="stream-status">Idle</span><br>
-                            <strong>Frame Size:</strong> <span id="frame-size">N/A</span><br>
-                            <strong>Last Update:</strong> <span id="last-update">Never</span>
+                        <div style="font-size: 0.9em; color: #666; margin-top: 15px;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                                <div style="background: #f5f7fa; padding: 10px; border-radius: 6px;">
+                                    <strong style="display: block; color: #333; margin-bottom: 5px;">Frames:</strong>
+                                    <span id="frame-count" style="font-size: 1.3em; color: #667eea; font-weight: bold;">0</span>
+                                </div>
+                                <div style="background: #f5f7fa; padding: 10px; border-radius: 6px;">
+                                    <strong style="display: block; color: #333; margin-bottom: 5px;">Rate:</strong>
+                                    <span id="frame-rate" style="font-size: 1.3em; color: #667eea; font-weight: bold;">0/s</span>
+                                </div>
+                            </div>
+                            <strong>Status:</strong> <span id="stream-status">Idle</span><br>
+                            <strong>Resolution:</strong> <span id="frame-size">1920×1440</span><br>
+                            <strong>Updated:</strong> <span id="last-update">Never</span>
                         </div>
                     </div>
                 </div>
@@ -573,6 +586,93 @@ async def get_dashboard():
 
             let currentAdapterId = null;
             let eventSource = null;
+            let frameCount = 0;
+            let frameTimestamps = [];
+
+            function updateFrameRate() {
+                const now = Date.now();
+                frameTimestamps = frameTimestamps.filter(t => now - t < 1000);
+                const rate = frameTimestamps.length;
+                document.getElementById('frame-rate').textContent = rate + '/s';
+            }
+
+            function displayVideoFrame(detection) {
+                frameCount++;
+                frameTimestamps.push(Date.now());
+                updateFrameRate();
+
+                // Update frame count
+                document.getElementById('frame-count').textContent = frameCount;
+
+                // Create visual representation
+                const canvas = document.getElementById('video-canvas');
+                const ctx = canvas.getContext('2d');
+
+                canvas.width = 320;
+                canvas.height = 240;
+
+                // Background: gradient representing video
+                const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+                gradient.addColor('#667eea', 0);
+                gradient.addColor('#764ba2', 1);
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw a subtle grid
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+                ctx.lineWidth = 1;
+                for (let i = 0; i < canvas.width; i += 40) {
+                    ctx.beginPath();
+                    ctx.moveTo(i, 0);
+                    ctx.lineTo(i, canvas.height);
+                    ctx.stroke();
+                }
+                for (let i = 0; i < canvas.height; i += 30) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, i);
+                    ctx.lineTo(canvas.width, i);
+                    ctx.stroke();
+                }
+
+                // Draw detection point
+                ctx.fillStyle = '#10b981';
+                ctx.beginPath();
+                ctx.arc(
+                    (detection.pixel_x / 1920) * canvas.width,
+                    (detection.pixel_y / 1440) * canvas.height,
+                    6,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+
+                // Draw confidence glow
+                ctx.strokeStyle = detection.confidence > 0.9 ? '#10b981' :
+                                detection.confidence > 0.75 ? '#f59e0b' : '#ef4444';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(
+                    (detection.pixel_x / 1920) * canvas.width,
+                    (detection.pixel_y / 1440) * canvas.height,
+                    12,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.stroke();
+
+                // Display as image
+                document.getElementById('video-content').innerHTML = '';
+                const container = document.getElementById('video-content');
+                container.appendChild(canvas);
+                canvas.style.display = 'block';
+                canvas.style.maxWidth = '100%';
+
+                // Show detection info overlay
+                const info = document.createElement('div');
+                info.style.cssText = 'position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 0.85em;';
+                info.innerHTML = `🎬 Frame ${frameCount} • ${detection.confidence_flag || '?'} ${(detection.confidence * 100).toFixed(0)}%`;
+                container.appendChild(info);
+            }
 
             async function startFeed() {
                 if (!currentFeed) {
@@ -581,9 +681,12 @@ async def get_dashboard():
                 }
 
                 currentAdapterId = document.getElementById('feed-select').value;
+                frameCount = 0;
 
                 document.getElementById('stream-status').textContent = 'Starting...';
                 document.getElementById('video-content').innerHTML = '🎬<br><small>Connecting...</small>';
+                document.getElementById('frame-count').textContent = '0';
+                document.getElementById('frame-rate').textContent = '0/s';
 
                 try {
                     // Start the adapter on the backend
@@ -662,6 +765,9 @@ async def get_dashboard():
             function addDetection(detection) {
                 detectionCount++;
                 updateStats();
+
+                // Display video frame with detection
+                displayVideoFrame(detection);
 
                 const confidenceClass = detection.confidence > 0.9 ? 'confidence-green' :
                                        detection.confidence > 0.75 ? 'confidence-yellow' : 'confidence-red';
