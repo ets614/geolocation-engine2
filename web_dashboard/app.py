@@ -319,11 +319,12 @@ async def get_dashboard():
                 font-family: 'Courier New', monospace;
                 font-size: 0.85em;
                 overflow-x: auto;
-                max-height: 500px;
                 overflow-y: auto;
                 line-height: 1.5;
                 white-space: pre-wrap;
                 word-wrap: break-word;
+                flex: 1;
+                min-height: 200px;
             }
 
             .cot-tag {
