@@ -49,6 +49,3 @@ docker-compose.override.yml
 .DS_Store
 Thumbs.db
 
-# nWave
-.nwave/des/des-task-active*
-.nwave/des/logs/
