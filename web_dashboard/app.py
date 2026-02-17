@@ -17,6 +17,16 @@ from pathlib import Path
 import httpx
 from worker import WorkerManager
 
+# Import AI adapters
+try:
+    from adapters.huggingface import HuggingFaceDetector
+except (ImportError, ValueError):
+    HuggingFaceDetector = None
+try:
+    from adapters.roboflow import RoboflowDetector
+except (ImportError, ValueError):
+    RoboflowDetector = None
+
 app = FastAPI(title="Geolocation Engine Dashboard")
 
 # Initialize worker manager
@@ -1239,83 +1249,100 @@ async def detections_stream():
 
 @app.post("/api/simulator/submit")
 async def simulator_submit(data: SimulatorRequest):
-    """Submit simulated camera telemetry to geolocation engine"""
+    """Submit simulated camera telemetry with real HuggingFace AI detections"""
     latitude = data.latitude
     longitude = data.longitude
     elevation = data.elevation
     heading = data.heading
-    # Random pixel coordinates for detection (center of image with small variance)
-    pixel_x = float(np.random.normal(960, 100))  # Center around middle of 1920px width
-    pixel_y = float(np.random.normal(720, 80))   # Center around middle of 1440px height
 
-    # Clamp to valid range
-    pixel_x = max(0, min(1920, pixel_x))
-    pixel_y = max(0, min(1440, pixel_y))
-
-    # Random object class
-    object_classes = ["person", "vehicle", "building", "landmark"]
-    object_class = np.random.choice(object_classes)
-
-    # Random confidence
-    ai_confidence = float(np.random.uniform(0.75, 0.98))
-
-    payload = {
-        "image_base64": MINIMAL_PNG,
-        "pixel_x": pixel_x,
-        "pixel_y": pixel_y,
-        "object_class": object_class,
-        "ai_confidence": ai_confidence,
-        "source": "web-simulator",
-        "camera_id": "simulator",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "sensor_metadata": {
-            "location_lat": latitude,
-            "location_lon": longitude,
-            "location_elevation": elevation,
-            "heading": float(heading),
-            "pitch": float(np.random.uniform(-30, 30)),
-            "roll": 0.0,
-            "focal_length": 3000.0,
-            "sensor_width_mm": 6.4,
-            "sensor_height_mm": 4.8,
-            "image_width": 1920,
-            "image_height": 1440,
-        },
-    }
+    # Get real AI detections from HuggingFace
+    detections = []
+    if not HuggingFaceDetector:
+        raise HTTPException(
+            status_code=503,
+            detail="HuggingFace adapter not available. Set HF_API_KEY environment variable."
+        )
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                "http://localhost:8000/api/v1/detections",
-                json=payload,
+        detector = HuggingFaceDetector(model="facebook/detr-resnet-50", confidence_threshold=0.5)
+        detections = await detector.detect_and_convert_pixels(MINIMAL_PNG)
+
+        if not detections:
+            raise HTTPException(
+                status_code=400,
+                detail="No detections found in image. Try again or check HuggingFace API status."
             )
 
-        if response.status_code == 201:
-            return {
-                "status": "success",
-                "message": "Simulated detection processed",
-                "location": {
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "elevation": elevation,
-                    "heading": heading
-                },
-                "detection": {
-                    "object_class": object_class,
-                    "ai_confidence": ai_confidence,
-                    "pixel_x": pixel_x,
-                    "pixel_y": pixel_y
-                },
-                "detection_id": response.headers.get('X-Detection-ID'),
-                "confidence_flag": response.headers.get('X-Confidence-Flag')
-            }
-        else:
-            raise HTTPException(status_code=response.status_code, detail=f"Geolocation engine error: {response.text}")
-
-    except httpx.ConnectError:
-        raise HTTPException(status_code=503, detail="Geolocation engine not running on http://localhost:8000")
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=f"HuggingFace API error: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing simulation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error running AI detection: {str(e)}")
+
+    # Send each detection to geolocation engine
+    processed = []
+    for detection in detections:
+        payload = {
+            "image_base64": MINIMAL_PNG,
+            "pixel_x": detection["pixel_x"],
+            "pixel_y": detection["pixel_y"],
+            "object_class": detection["object_class"],
+            "ai_confidence": detection["ai_confidence"],
+            "source": "web-simulator",
+            "camera_id": "simulator",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "sensor_metadata": {
+                "location_lat": latitude,
+                "location_lon": longitude,
+                "location_elevation": elevation,
+                "heading": float(heading),
+                "pitch": float(np.random.uniform(-30, 30)),
+                "roll": 0.0,
+                "focal_length": 3000.0,
+                "sensor_width_mm": 6.4,
+                "sensor_height_mm": 4.8,
+                "image_width": 1920,
+                "image_height": 1440,
+            },
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    "http://localhost:8000/api/v1/detections",
+                    json=payload,
+                )
+
+            if response.status_code == 201:
+                processed.append({
+                    "object_class": detection["object_class"],
+                    "ai_confidence": detection["ai_confidence"],
+                    "pixel_x": detection["pixel_x"],
+                    "pixel_y": detection["pixel_y"],
+                    "detection_id": response.headers.get('X-Detection-ID'),
+                    "confidence_flag": response.headers.get('X-Confidence-Flag')
+                })
+            else:
+                # Log error but continue processing other detections
+                print(f"Warning: Detection failed with status {response.status_code}")
+
+        except Exception as e:
+            print(f"Error processing detection: {e}")
+
+    if not processed:
+        raise HTTPException(status_code=500, detail="Failed to process any detections")
+
+    return {
+        "status": "success",
+        "message": f"Processed {len(processed)} real AI detections from HuggingFace",
+        "location": {
+            "latitude": latitude,
+            "longitude": longitude,
+            "elevation": elevation,
+            "heading": heading
+        },
+        "detections_processed": processed,
+        "total": len(processed)
+    }
 
 
 if __name__ == "__main__":
