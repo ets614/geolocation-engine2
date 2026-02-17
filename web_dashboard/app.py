@@ -1044,22 +1044,18 @@ async def get_dashboard():
                 cotCount++;
                 updateStats();
 
-                const formatted = xml.split('\\n').map(line => {
-                    let html = line
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;');
+                // Escape HTML first
+                let html = xml
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
 
-                    // Syntax highlighting
-                    html = html.replace(/(&lt;\\?[\w\\s=".:\/\\-]*\\?&gt;)/g, '<span class="cot-tag">$1</span>');
-                    html = html.replace(/(&lt;\\/?\w+)/g, '<span class="cot-tag">$1</span>');
-                    html = html.replace(/(\\w+)=/g, '<span class="cot-attr">$1</span>=');
-                    html = html.replace(/="([^"]*)"/g, '=<span class="cot-value">"$1"</span>');
+                // Simple highlighting - just highlight complete tags
+                html = html.replace(/(&lt;\\?[^?]*\\?&gt;)/g, '<span class="cot-tag">$1</span>');
+                html = html.replace(/(&lt;\\/[^&]*&gt;)/g, '<span class="cot-tag">$1</span>');
+                html = html.replace(/(&lt;[^&/][^&]*&gt;)/g, '<span class="cot-tag">$1</span>');
 
-                    return html;
-                }).join('\\n');
-
-                document.getElementById('cot-output').innerHTML = formatted;
+                document.getElementById('cot-output').innerHTML = '<pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word; word-break: break-all;">' + html + '</pre>';
             }
 
 
