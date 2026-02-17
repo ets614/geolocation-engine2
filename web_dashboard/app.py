@@ -39,13 +39,15 @@ MINIMAL_PNG = base64.b64encode(
 ).decode()
 
 FEEDS = {
+    # ===== LANDMARKS =====
     "times-square": {
         "name": "Times Square, NYC",
         "lat": 40.7580,
         "lon": -73.9855,
         "elevation": 30.0,
         "description": "Urban landmark with high complexity",
-        "icon": "🗽"
+        "icon": "🗽",
+        "category": "Landmarks"
     },
     "eiffel-tower": {
         "name": "Eiffel Tower, Paris",
@@ -53,7 +55,8 @@ FEEDS = {
         "lon": 2.2945,
         "elevation": 100.0,
         "description": "Iconic French landmark",
-        "icon": "🗼"
+        "icon": "🗼",
+        "category": "Landmarks"
     },
     "tokyo-tower": {
         "name": "Tokyo Tower, Japan",
@@ -61,7 +64,8 @@ FEEDS = {
         "lon": 139.7396,
         "elevation": 150.0,
         "description": "Japanese landmark with clear lines",
-        "icon": "🗾"
+        "icon": "🗾",
+        "category": "Landmarks"
     },
     "christ-redeemer": {
         "name": "Christ the Redeemer, Rio",
@@ -69,7 +73,8 @@ FEEDS = {
         "lon": -43.2105,
         "elevation": 380.0,
         "description": "Iconic statue with high elevation",
-        "icon": "🗿"
+        "icon": "🗿",
+        "category": "Landmarks"
     },
     "big-ben": {
         "name": "Big Ben, London",
@@ -77,7 +82,65 @@ FEEDS = {
         "lon": -0.1357,
         "elevation": 50.0,
         "description": "Architectural landmark",
-        "icon": "🏛️"
+        "icon": "🏛️",
+        "category": "Landmarks"
+    },
+    # ===== SPACE =====
+    "iss-earth": {
+        "name": "ISS Earth Camera (Orbital)",
+        "lat": 0.0,
+        "lon": 0.0,
+        "elevation": 400000.0,
+        "description": "NASA International Space Station - 400km altitude",
+        "icon": "🛰️",
+        "category": "Space"
+    },
+    # ===== TRAFFIC =====
+    "ca-highway-101": {
+        "name": "CA Highway 101 South",
+        "lat": 37.7749,
+        "lon": -122.4194,
+        "elevation": 15.0,
+        "description": "San Francisco highway - real vehicle detection",
+        "icon": "🚗",
+        "category": "Traffic"
+    },
+    "la-highway-405": {
+        "name": "LA Highway I-405",
+        "lat": 34.0522,
+        "lon": -118.2437,
+        "elevation": 15.0,
+        "description": "Los Angeles highway - multi-vehicle tracking",
+        "icon": "🚗",
+        "category": "Traffic"
+    },
+    # ===== WILDLIFE =====
+    "serengeti-safari": {
+        "name": "Serengeti National Park",
+        "lat": -2.3333,
+        "lon": 34.8888,
+        "elevation": 1500.0,
+        "description": "African savanna - wildlife detection",
+        "icon": "🦁",
+        "category": "Wildlife"
+    },
+    "mount-etna": {
+        "name": "Mount Etna Volcano",
+        "lat": 37.7511,
+        "lon": 15.0034,
+        "elevation": 3300.0,
+        "description": "Active volcano in Sicily - extreme terrain",
+        "icon": "🌋",
+        "category": "Wildlife"
+    },
+    "great-barrier-reef": {
+        "name": "Great Barrier Reef",
+        "lat": -18.2871,
+        "lon": 147.6992,
+        "elevation": 0.0,
+        "description": "Underwater coral reef - edge case testing",
+        "icon": "🐠",
+        "category": "Wildlife"
     },
 }
 

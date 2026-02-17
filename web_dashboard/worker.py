@@ -22,12 +22,14 @@ class AdapterWorker:
     """Runs a single adapter feed and streams results"""
 
     ADAPTERS = {
+        # Landmarks
         "times-square": {
             "name": "Times Square, NYC",
             "lat": 40.7580,
             "lon": -73.9855,
             "elevation": 30.0,
             "icon": "🗽",
+            "category": "landmarks"
         },
         "eiffel-tower": {
             "name": "Eiffel Tower, Paris",
@@ -35,6 +37,7 @@ class AdapterWorker:
             "lon": 2.2945,
             "elevation": 100.0,
             "icon": "🗼",
+            "category": "landmarks"
         },
         "tokyo-tower": {
             "name": "Tokyo Tower, Japan",
@@ -42,6 +45,7 @@ class AdapterWorker:
             "lon": 139.7396,
             "elevation": 150.0,
             "icon": "🗾",
+            "category": "landmarks"
         },
         "christ-redeemer": {
             "name": "Christ the Redeemer, Rio",
@@ -49,6 +53,7 @@ class AdapterWorker:
             "lon": -43.2105,
             "elevation": 380.0,
             "icon": "🗿",
+            "category": "landmarks"
         },
         "big-ben": {
             "name": "Big Ben, London",
@@ -56,6 +61,58 @@ class AdapterWorker:
             "lon": -0.1357,
             "elevation": 50.0,
             "icon": "🏛️",
+            "category": "landmarks"
+        },
+        # ISS - Space
+        "iss-earth": {
+            "name": "ISS Earth Camera (Orbital)",
+            "lat": 0.0,  # Varies, updated from API
+            "lon": 0.0,  # Varies, updated from API
+            "elevation": 400000.0,  # 400km altitude
+            "icon": "🛰️",
+            "category": "space"
+        },
+        # Traffic Cameras
+        "ca-highway-101": {
+            "name": "CA Highway 101 South",
+            "lat": 37.7749,
+            "lon": -122.4194,
+            "elevation": 15.0,
+            "icon": "🚗",
+            "category": "traffic"
+        },
+        "la-highway-405": {
+            "name": "LA Highway I-405",
+            "lat": 34.0522,
+            "lon": -118.2437,
+            "elevation": 15.0,
+            "icon": "🚗",
+            "category": "traffic"
+        },
+        # Wildlife
+        "serengeti-safari": {
+            "name": "Serengeti National Park",
+            "lat": -2.3333,
+            "lon": 34.8888,
+            "elevation": 1500.0,
+            "icon": "🦁",
+            "category": "wildlife"
+        },
+        "mount-etna": {
+            "name": "Mount Etna Volcano",
+            "lat": 37.7511,
+            "lon": 15.0034,
+            "elevation": 3300.0,
+            "icon": "🌋",
+            "category": "wildlife"
+        },
+        "great-barrier-reef": {
+            "name": "Great Barrier Reef",
+            "lat": -18.2871,
+            "lon": 147.6992,
+            "elevation": 0.0,
+            "icon": "🐠",
+            "category": "wildlife"
         },
     }
 
