@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Adapter Worker Service
-Runs live camera adapters and streams results to the dashboard
+Runs local inference generator feeds for object detection
+No external APIs - clean and simple
 """
 import asyncio
 import httpx
@@ -10,18 +11,9 @@ import base64
 from datetime import datetime
 from typing import Dict, List, Callable, Optional
 import json
-import os
 
-# Import AI adapters
-try:
-    from adapters.roboflow import RoboflowDetector
-except ImportError:
-    RoboflowDetector = None
-
-try:
-    from adapters.huggingface import HuggingFaceDetector
-except ImportError:
-    HuggingFaceDetector = None
+# Import local inference generator
+from adapters.inference_generator import InferenceGenerator
 
 
 # Minimal valid PNG for testing
@@ -31,49 +23,44 @@ MINIMAL_PNG = base64.b64encode(
 
 
 class AdapterWorker:
-    """Runs a single adapter feed and streams results"""
+    """Runs a single inference generator adapter feed"""
 
     ADAPTERS = {
-        # Real AI Detection Adapters Only
-        "roboflow-coco": {
-            "name": "🤖 Roboflow COCO (Real AI)",
+        "inference-urban": {
+            "name": "🏙️ Urban Scene Detector",
             "lat": 40.7128,
             "lon": -74.0060,
             "elevation": 10.0,
-            "icon": "🤖",
-            "category": "real_ai",
-            "ai_provider": "roboflow",
-            "ai_model": "coco"
+            "icon": "🏙️",
+            "category": "inference",
+            "confidence_bias": "high"
         },
-        "roboflow-logos": {
-            "name": "🏷️ Roboflow Logos (Real AI)",
+        "inference-mixed": {
+            "name": "🎯 Mixed Scene Detector",
             "lat": 40.7128,
             "lon": -74.0060,
             "elevation": 10.0,
-            "icon": "🏷️",
-            "category": "real_ai",
-            "ai_provider": "roboflow",
-            "ai_model": "openlogo"
+            "icon": "🎯",
+            "category": "inference",
+            "confidence_bias": "medium"
         },
-        "huggingface-detr": {
-            "name": "🤗 HuggingFace DETR (Real AI)",
+        "inference-wildlife": {
+            "name": "🦁 Wildlife Detector",
             "lat": 40.7128,
             "lon": -74.0060,
             "elevation": 10.0,
-            "icon": "🤗",
-            "category": "real_ai",
-            "ai_provider": "huggingface",
-            "ai_model": "facebook/detr-resnet-50"
+            "icon": "🦁",
+            "category": "inference",
+            "confidence_bias": "medium"
         },
-        "huggingface-yolos": {
-            "name": "⚡ HuggingFace YOLOS (Fast AI)",
+        "inference-high-confidence": {
+            "name": "✅ High Confidence Detector",
             "lat": 40.7128,
             "lon": -74.0060,
             "elevation": 10.0,
-            "icon": "⚡",
-            "category": "real_ai",
-            "ai_provider": "huggingface",
-            "ai_model": "hustvl/yolos-tiny"
+            "icon": "✅",
+            "category": "inference",
+            "confidence_bias": "high"
         },
     }
 
@@ -96,12 +83,11 @@ class AdapterWorker:
         print(json.dumps(detection, indent=2))
 
     async def process_frame(self) -> Dict:
-        """Process a single frame with real AI detection"""
+        """Process a single frame with local inference"""
         if not self.adapter_config:
             raise ValueError(f"Adapter {self.adapter_id} not found")
 
         config = self.adapter_config
-        ai_provider = config.get("ai_provider")
 
         result = {
             "adapter_id": self.adapter_id,
@@ -112,36 +98,14 @@ class AdapterWorker:
         }
 
         try:
-            # Try to get AI detections if API keys configured
-            detections = []
-            use_demo = False
-
-            if ai_provider == "roboflow" and RoboflowDetector and os.getenv("ROBOFLOW_API_KEY"):
-                try:
-                    detector = RoboflowDetector(model=config.get("ai_model", "coco"))
-                    detections = await detector.detect_and_convert_pixels(MINIMAL_PNG)
-                    if detections:
-                        print(f"✅ Got {len(detections)} real detections from Roboflow")
-                except Exception as e:
-                    print(f"⚠️ Roboflow failed: {e}, using demo mode")
-                    use_demo = True
-
-            elif ai_provider == "huggingface" and HuggingFaceDetector and os.getenv("HF_API_KEY"):
-                try:
-                    detector = HuggingFaceDetector(model=config.get("ai_model"))
-                    detections = await detector.detect_and_convert_pixels(MINIMAL_PNG)
-                    if detections:
-                        print(f"✅ Got {len(detections)} real detections from HuggingFace")
-                except Exception as e:
-                    print(f"⚠️ HuggingFace failed: {e}, using demo mode")
-                    use_demo = True
-            else:
-                use_demo = True
-
-            # Fall back to demo mode if no real detections
-            if not detections or use_demo:
-                detections = self._generate_demo_detections()
-                print(f"ℹ️ Demo mode: {len(detections)} realistic detections for {self.adapter_id}")
+            # Generate detections locally using inference generator
+            generator = InferenceGenerator()
+            confidence_bias = config.get("confidence_bias", "medium")
+            detections = generator.generate_detections(
+                num_objects=np.random.randint(1, 4),
+                confidence_bias=confidence_bias
+            )
+            print(f"✨ Generated {len(detections)} detections for {self.adapter_id}")
 
             # Send each detection to geolocation engine
             for detection in detections:
@@ -225,24 +189,6 @@ class AdapterWorker:
     def stop(self):
         """Stop the adapter"""
         self.running = False
-
-    def _generate_demo_detections(self) -> List[Dict]:
-        """Generate realistic demo detections when APIs unavailable"""
-        object_classes = ["person", "car", "dog", "cat", "bird", "bicycle", "bus", "truck", "building", "tree"]
-
-        # Generate 1-3 detections per frame
-        num_detections = np.random.randint(1, 3)
-        detections = []
-
-        for _ in range(num_detections):
-            detections.append({
-                "pixel_x": float(np.random.randint(200, 1720)),
-                "pixel_y": float(np.random.randint(150, 1290)),
-                "object_class": str(np.random.choice(object_classes)),  # Convert to plain Python str
-                "ai_confidence": float(np.random.uniform(0.70, 0.98)),
-            })
-
-        return detections
 
 
 class WorkerManager:
