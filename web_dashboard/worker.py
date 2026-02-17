@@ -8,8 +8,20 @@ import httpx
 import numpy as np
 import base64
 from datetime import datetime
-from typing import Dict, List, Callable
+from typing import Dict, List, Callable, Optional
 import json
+import os
+
+# Import AI adapters
+try:
+    from adapters.roboflow import RoboflowDetector
+except ImportError:
+    RoboflowDetector = None
+
+try:
+    from adapters.huggingface import HuggingFaceDetector
+except ImportError:
+    HuggingFaceDetector = None
 
 
 # Minimal valid PNG for testing
@@ -22,97 +34,46 @@ class AdapterWorker:
     """Runs a single adapter feed and streams results"""
 
     ADAPTERS = {
-        # Landmarks
-        "times-square": {
-            "name": "Times Square, NYC",
-            "lat": 40.7580,
-            "lon": -73.9855,
-            "elevation": 30.0,
-            "icon": "🗽",
-            "category": "landmarks"
+        # Real AI Detection Adapters Only
+        "roboflow-coco": {
+            "name": "🤖 Roboflow COCO (Real AI)",
+            "lat": 40.7128,
+            "lon": -74.0060,
+            "elevation": 10.0,
+            "icon": "🤖",
+            "category": "real_ai",
+            "ai_provider": "roboflow",
+            "ai_model": "coco"
         },
-        "eiffel-tower": {
-            "name": "Eiffel Tower, Paris",
-            "lat": 48.8584,
-            "lon": 2.2945,
-            "elevation": 100.0,
-            "icon": "🗼",
-            "category": "landmarks"
+        "roboflow-logos": {
+            "name": "🏷️ Roboflow Logos (Real AI)",
+            "lat": 40.7128,
+            "lon": -74.0060,
+            "elevation": 10.0,
+            "icon": "🏷️",
+            "category": "real_ai",
+            "ai_provider": "roboflow",
+            "ai_model": "openlogo"
         },
-        "tokyo-tower": {
-            "name": "Tokyo Tower, Japan",
-            "lat": 35.6750,
-            "lon": 139.7396,
-            "elevation": 150.0,
-            "icon": "🗾",
-            "category": "landmarks"
+        "huggingface-detr": {
+            "name": "🤗 HuggingFace DETR (Real AI)",
+            "lat": 40.7128,
+            "lon": -74.0060,
+            "elevation": 10.0,
+            "icon": "🤗",
+            "category": "real_ai",
+            "ai_provider": "huggingface",
+            "ai_model": "facebook/detr-resnet-50"
         },
-        "christ-redeemer": {
-            "name": "Christ the Redeemer, Rio",
-            "lat": -22.9519,
-            "lon": -43.2105,
-            "elevation": 380.0,
-            "icon": "🗿",
-            "category": "landmarks"
-        },
-        "big-ben": {
-            "name": "Big Ben, London",
-            "lat": 51.4975,
-            "lon": -0.1357,
-            "elevation": 50.0,
-            "icon": "🏛️",
-            "category": "landmarks"
-        },
-        # ISS - Space
-        "iss-earth": {
-            "name": "ISS Earth Camera (Orbital)",
-            "lat": 0.0,  # Varies, updated from API
-            "lon": 0.0,  # Varies, updated from API
-            "elevation": 400000.0,  # 400km altitude
-            "icon": "🛰️",
-            "category": "space"
-        },
-        # Traffic Cameras
-        "ca-highway-101": {
-            "name": "CA Highway 101 South",
-            "lat": 37.7749,
-            "lon": -122.4194,
-            "elevation": 15.0,
-            "icon": "🚗",
-            "category": "traffic"
-        },
-        "la-highway-405": {
-            "name": "LA Highway I-405",
-            "lat": 34.0522,
-            "lon": -118.2437,
-            "elevation": 15.0,
-            "icon": "🚗",
-            "category": "traffic"
-        },
-        # Wildlife
-        "serengeti-safari": {
-            "name": "Serengeti National Park",
-            "lat": -2.3333,
-            "lon": 34.8888,
-            "elevation": 1500.0,
-            "icon": "🦁",
-            "category": "wildlife"
-        },
-        "mount-etna": {
-            "name": "Mount Etna Volcano",
-            "lat": 37.7511,
-            "lon": 15.0034,
-            "elevation": 3300.0,
-            "icon": "🌋",
-            "category": "wildlife"
-        },
-        "great-barrier-reef": {
-            "name": "Great Barrier Reef",
-            "lat": -18.2871,
-            "lon": 147.6992,
-            "elevation": 0.0,
-            "icon": "🐠",
-            "category": "wildlife"
+        "huggingface-yolos": {
+            "name": "⚡ HuggingFace YOLOS (Fast AI)",
+            "lat": 40.7128,
+            "lon": -74.0060,
+            "elevation": 10.0,
+            "icon": "⚡",
+            "category": "real_ai",
+            "ai_provider": "huggingface",
+            "ai_model": "hustvl/yolos-tiny"
         },
     }
 
@@ -135,83 +96,135 @@ class AdapterWorker:
         print(json.dumps(detection, indent=2))
 
     async def process_frame(self) -> Dict:
-        """Process a single frame and return detection"""
+        """Process a single frame with real AI detection"""
         if not self.adapter_config:
             raise ValueError(f"Adapter {self.adapter_id} not found")
 
         config = self.adapter_config
-
-        # Simulate detection at random pixel location
-        pixel_x = float(np.random.randint(200, 1720))
-        pixel_y = float(np.random.randint(150, 1290))
-        confidence = float(np.random.uniform(0.70, 0.98))
-
-        # Build geolocation API payload
-        payload = {
-            "image_base64": MINIMAL_PNG,
-            "pixel_x": pixel_x,
-            "pixel_y": pixel_y,
-            "object_class": "landmark",
-            "ai_confidence": confidence,
-            "source": f"adapter-{self.adapter_id}",
-            "camera_id": self.adapter_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "sensor_metadata": {
-                "location_lat": config["lat"],
-                "location_lon": config["lon"],
-                "location_elevation": config["elevation"],
-                "heading": float(np.random.uniform(0, 360)),
-                "pitch": float(np.random.uniform(-45, 45)),
-                "roll": 0.0,
-                "focal_length": 3000.0,
-                "sensor_width_mm": 6.4,
-                "sensor_height_mm": 4.8,
-                "image_width": 1920,
-                "image_height": 1440,
-            },
-        }
+        ai_provider = config.get("ai_provider")
 
         result = {
             "adapter_id": self.adapter_id,
             "adapter_name": config["name"],
             "timestamp": datetime.utcnow().isoformat(),
-            "pixel_x": pixel_x,
-            "pixel_y": pixel_y,
-            "ai_confidence": confidence,
             "status": "processing",
             "error": None,
         }
 
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.post(
-                    f"{self.geolocation_url}/api/v1/detections",
-                    json=payload,
-                )
+            # Check if API keys are configured
+            if ai_provider == "roboflow":
+                if not os.getenv("ROBOFLOW_API_KEY"):
+                    result["status"] = "error"
+                    result["error"] = "❌ ROBOFLOW_API_KEY not set. Run: export ROBOFLOW_API_KEY='rf_...'"
+                    await self.on_detection(result)
+                    return result
+                if not RoboflowDetector:
+                    result["status"] = "error"
+                    result["error"] = "❌ Roboflow adapter not available"
+                    await self.on_detection(result)
+                    return result
 
-            if response.status_code == 201:
-                self.detection_count += 1
-                self.cot_count += 1
+            elif ai_provider == "huggingface":
+                if not os.getenv("HF_API_KEY"):
+                    result["status"] = "error"
+                    result["error"] = "❌ HF_API_KEY not set. Run: export HF_API_KEY='hf_...'"
+                    await self.on_detection(result)
+                    return result
+                if not HuggingFaceDetector:
+                    result["status"] = "error"
+                    result["error"] = "❌ HuggingFace adapter not available"
+                    await self.on_detection(result)
+                    return result
 
-                result["status"] = "success"
-                result["detection_id"] = response.headers.get("X-Detection-ID")
-                result["confidence_flag"] = response.headers.get("X-Confidence-Flag")
-                result["cot_xml"] = response.text
-
-                # Callback to dashboard
-                await self.on_detection(result)
-
-                return result
+            # Get AI detections
+            detections = []
+            if ai_provider == "roboflow" and RoboflowDetector:
+                try:
+                    detector = RoboflowDetector(model=config.get("ai_model", "coco"))
+                    detections = await detector.detect_and_convert_pixels(MINIMAL_PNG)
+                except ValueError as ve:
+                    result["status"] = "error"
+                    result["error"] = f"❌ Roboflow error: {str(ve)}"
+                    await self.on_detection(result)
+                    return result
+            elif ai_provider == "huggingface" and HuggingFaceDetector:
+                try:
+                    detector = HuggingFaceDetector(model=config.get("ai_model"))
+                    detections = await detector.detect_and_convert_pixels(MINIMAL_PNG)
+                except ValueError as ve:
+                    result["status"] = "error"
+                    result["error"] = f"❌ HuggingFace error: {str(ve)}"
+                    await self.on_detection(result)
+                    return result
             else:
                 result["status"] = "error"
-                result["error"] = f"API returned {response.status_code}"
+                result["error"] = f"❌ AI provider '{ai_provider}' not available"
+                await self.on_detection(result)
+                return result
+
+            if not detections:
+                result["status"] = "error"
+                result["error"] = "⚠️ No detections from AI model (or API limit reached)"
+                await self.on_detection(result)
+                return result
+
+            # Send each detection to geolocation engine
+            for detection in detections:
+                payload = {
+                    "image_base64": MINIMAL_PNG,
+                    "pixel_x": detection["pixel_x"],
+                    "pixel_y": detection["pixel_y"],
+                    "object_class": detection["object_class"],
+                    "ai_confidence": detection["ai_confidence"],
+                    "source": f"adapter-{self.adapter_id}",
+                    "camera_id": self.adapter_id,
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "sensor_metadata": {
+                        "location_lat": config["lat"],
+                        "location_lon": config["lon"],
+                        "location_elevation": config["elevation"],
+                        "heading": float(np.random.uniform(0, 360)),
+                        "pitch": float(np.random.uniform(-45, 45)),
+                        "roll": 0.0,
+                        "focal_length": 3000.0,
+                        "sensor_width_mm": 6.4,
+                        "sensor_height_mm": 4.8,
+                        "image_width": 1920,
+                        "image_height": 1440,
+                    },
+                }
+
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.post(
+                        f"{self.geolocation_url}/api/v1/detections",
+                        json=payload,
+                    )
+
+                if response.status_code == 201:
+                    self.detection_count += 1
+                    self.cot_count += 1
+
+                    detection_result = result.copy()
+                    detection_result["status"] = "success"
+                    detection_result["pixel_x"] = detection["pixel_x"]
+                    detection_result["pixel_y"] = detection["pixel_y"]
+                    detection_result["ai_confidence"] = detection["ai_confidence"]
+                    detection_result["detection_id"] = response.headers.get("X-Detection-ID")
+                    detection_result["confidence_flag"] = response.headers.get("X-Confidence-Flag")
+                    detection_result["cot_xml"] = response.text
+
+                    # Callback to dashboard
+                    await self.on_detection(detection_result)
+
+            return result
 
         except Exception as e:
             result["status"] = "error"
-            result["error"] = str(e)
-
-        await self.on_detection(result)
-        return result
+            result["error"] = f"❌ Unexpected error: {str(e)}"
+            print(f"❌ Error in {self.adapter_id}: {e}", flush=True)
+            await self.on_detection(result)
+            return result
 
     async def run_continuous(self, interval: float = 2.0):
         """Run adapter continuously, processing frames at interval"""

@@ -3,10 +3,11 @@
 Geolocation Engine 2 - Web Dashboard
 Beautiful UI for visualizing feeds → detections → CoT XML
 """
-from fastapi import FastAPI, WebSocket, HTTPException
+from fastapi import FastAPI, WebSocket, HTTPException, Body
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import asyncio
 import json
 import base64
@@ -33,114 +34,61 @@ app.add_middleware(
 # Store active sessions
 active_sessions = {}
 
+
+# Request models
+class SimulatorRequest(BaseModel):
+    latitude: float
+    longitude: float
+    elevation: float
+    heading: float = 0.0
+
+
 # Minimal valid PNG for demo
 MINIMAL_PNG = base64.b64encode(
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
 ).decode()
 
 FEEDS = {
-    # ===== LANDMARKS =====
-    "times-square": {
-        "name": "Times Square, NYC",
-        "lat": 40.7580,
-        "lon": -73.9855,
-        "elevation": 30.0,
-        "description": "Urban landmark with high complexity",
-        "icon": "🗽",
-        "category": "Landmarks"
+    # ===== REAL AI DETECTION FEEDS =====
+    "roboflow-coco": {
+        "name": "🤖 Roboflow COCO (Real AI)",
+        "lat": 40.7128,
+        "lon": -74.0060,
+        "elevation": 10.0,
+        "description": "Real-time AI object detection (80 classes: people, vehicles, animals, etc.)",
+        "icon": "🤖",
+        "category": "Real AI",
+        "requires_api_key": "ROBOFLOW_API_KEY"
     },
-    "eiffel-tower": {
-        "name": "Eiffel Tower, Paris",
-        "lat": 48.8584,
-        "lon": 2.2945,
-        "elevation": 100.0,
-        "description": "Iconic French landmark",
-        "icon": "🗼",
-        "category": "Landmarks"
+    "roboflow-logos": {
+        "name": "🏷️ Roboflow Logos (Real AI)",
+        "lat": 40.7128,
+        "lon": -74.0060,
+        "elevation": 10.0,
+        "description": "Real-time logo and brand detection",
+        "icon": "🏷️",
+        "category": "Real AI",
+        "requires_api_key": "ROBOFLOW_API_KEY"
     },
-    "tokyo-tower": {
-        "name": "Tokyo Tower, Japan",
-        "lat": 35.6750,
-        "lon": 139.7396,
-        "elevation": 150.0,
-        "description": "Japanese landmark with clear lines",
-        "icon": "🗾",
-        "category": "Landmarks"
+    "huggingface-detr": {
+        "name": "🤗 HuggingFace DETR (Real AI)",
+        "lat": 40.7128,
+        "lon": -74.0060,
+        "elevation": 10.0,
+        "description": "High-accuracy object detection from HuggingFace (30,000 free inferences/month)",
+        "icon": "🤗",
+        "category": "Real AI",
+        "requires_api_key": "HF_API_KEY"
     },
-    "christ-redeemer": {
-        "name": "Christ the Redeemer, Rio",
-        "lat": -22.9519,
-        "lon": -43.2105,
-        "elevation": 380.0,
-        "description": "Iconic statue with high elevation",
-        "icon": "🗿",
-        "category": "Landmarks"
-    },
-    "big-ben": {
-        "name": "Big Ben, London",
-        "lat": 51.4975,
-        "lon": -0.1357,
-        "elevation": 50.0,
-        "description": "Architectural landmark",
-        "icon": "🏛️",
-        "category": "Landmarks"
-    },
-    # ===== SPACE =====
-    "iss-earth": {
-        "name": "ISS Earth Camera (Orbital)",
-        "lat": 0.0,
-        "lon": 0.0,
-        "elevation": 400000.0,
-        "description": "NASA International Space Station - 400km altitude",
-        "icon": "🛰️",
-        "category": "Space"
-    },
-    # ===== TRAFFIC =====
-    "ca-highway-101": {
-        "name": "CA Highway 101 South",
-        "lat": 37.7749,
-        "lon": -122.4194,
-        "elevation": 15.0,
-        "description": "San Francisco highway - real vehicle detection",
-        "icon": "🚗",
-        "category": "Traffic"
-    },
-    "la-highway-405": {
-        "name": "LA Highway I-405",
-        "lat": 34.0522,
-        "lon": -118.2437,
-        "elevation": 15.0,
-        "description": "Los Angeles highway - multi-vehicle tracking",
-        "icon": "🚗",
-        "category": "Traffic"
-    },
-    # ===== WILDLIFE =====
-    "serengeti-safari": {
-        "name": "Serengeti National Park",
-        "lat": -2.3333,
-        "lon": 34.8888,
-        "elevation": 1500.0,
-        "description": "African savanna - wildlife detection",
-        "icon": "🦁",
-        "category": "Wildlife"
-    },
-    "mount-etna": {
-        "name": "Mount Etna Volcano",
-        "lat": 37.7511,
-        "lon": 15.0034,
-        "elevation": 3300.0,
-        "description": "Active volcano in Sicily - extreme terrain",
-        "icon": "🌋",
-        "category": "Wildlife"
-    },
-    "great-barrier-reef": {
-        "name": "Great Barrier Reef",
-        "lat": -18.2871,
-        "lon": 147.6992,
-        "elevation": 0.0,
-        "description": "Underwater coral reef - edge case testing",
-        "icon": "🐠",
-        "category": "Wildlife"
+    "huggingface-yolos": {
+        "name": "⚡ HuggingFace YOLOS (Fast AI)",
+        "lat": 40.7128,
+        "lon": -74.0060,
+        "elevation": 10.0,
+        "description": "Fast real-time detection from HuggingFace",
+        "icon": "⚡",
+        "category": "Real AI",
+        "requires_api_key": "HF_API_KEY"
     },
 }
 
@@ -193,7 +141,7 @@ async def get_dashboard():
 
             .dashboard {
                 display: grid;
-                grid-template-columns: 1fr 1fr 1fr;
+                grid-template-columns: 1fr 1fr 1fr 1fr;
                 gap: 20px;
                 margin-bottom: 20px;
             }
@@ -479,6 +427,64 @@ async def get_dashboard():
                 margin-top: 5px;
             }
 
+            .input-group {
+                margin-bottom: 15px;
+            }
+
+            .input-group label {
+                display: block;
+                font-weight: 600;
+                margin-bottom: 6px;
+                color: #333;
+                font-size: 0.9em;
+            }
+
+            .input-group input {
+                width: 100%;
+                padding: 10px;
+                border: 2px solid #ddd;
+                border-radius: 6px;
+                font-size: 0.95em;
+                box-sizing: border-box;
+            }
+
+            .input-group input:focus {
+                outline: none;
+                border-color: #667eea;
+                box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            }
+
+            .presets {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+                margin-bottom: 15px;
+            }
+
+            .preset-btn {
+                padding: 8px 12px;
+                background: #f0f4ff;
+                border: 2px solid #e0e6ff;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 0.85em;
+                font-weight: 500;
+                color: #667eea;
+                transition: all 0.2s;
+            }
+
+            .preset-btn:hover {
+                background: #e0e6ff;
+                border-color: #667eea;
+                transform: translateY(-1px);
+            }
+
+            @media (max-width: 1400px) {
+                .dashboard {
+                    grid-template-columns: 1fr 1fr;
+                }
+            }
+
             @media (max-width: 1200px) {
                 .dashboard {
                     grid-template-columns: 1fr 1fr;
@@ -611,6 +617,53 @@ async def get_dashboard():
                         </ul>
                     </div>
                 </div>
+
+                <!-- Camera Simulator Panel -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <span>🎥</span>
+                        <span>Camera Simulator</span>
+                    </div>
+                    <div class="panel-body">
+                        <div style="margin-bottom: 15px;">
+                            <label style="font-weight: 600; color: #333; font-size: 0.9em; display: block; margin-bottom: 8px;">Quick Presets:</label>
+                            <div class="presets">
+                                <button class="preset-btn" onclick="setPreset({lat: 40.7580, lon: -73.9855, elev: 10, name: 'Times Square'})">📍 Times Square</button>
+                                <button class="preset-btn" onclick="setPreset({lat: 48.8584, lon: 2.2945, elev: 100, name: 'Eiffel Tower'})">🗼 Eiffel Tower</button>
+                                <button class="preset-btn" onclick="setPreset({lat: 35.6750, lon: 139.7396, elev: 150, name: 'Tokyo Tower'})">🗾 Tokyo Tower</button>
+                                <button class="preset-btn" onclick="setPreset({lat: 22.9519, lon: -43.2105, elev: 700, name: 'Christ Redeemer'})">✝️ Christ Redeemer</button>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="sim-lat">📏 Latitude:</label>
+                            <input type="number" id="sim-lat" placeholder="40.7128" step="0.0001" />
+                        </div>
+
+                        <div class="input-group">
+                            <label for="sim-lon">↔️ Longitude:</label>
+                            <input type="number" id="sim-lon" placeholder="-74.0060" step="0.0001" />
+                        </div>
+
+                        <div class="input-group">
+                            <label for="sim-elev">📐 Elevation (m):</label>
+                            <input type="number" id="sim-elev" placeholder="10" step="1" />
+                        </div>
+
+                        <div class="input-group">
+                            <label for="sim-heading">🧭 Heading (°):</label>
+                            <input type="number" id="sim-heading" placeholder="0" step="1" min="0" max="360" />
+                        </div>
+
+                        <button class="button" onclick="submitSimulation()" style="width: 100%; margin-top: auto;">
+                            ▶️ Simulate Detection
+                        </button>
+
+                        <div style="margin-top: 15px; font-size: 0.85em; color: #666; background: #f5f7fa; padding: 10px; border-radius: 6px; border-left: 3px solid #667eea;">
+                            <strong style="color: #333;">Tip:</strong> Uses simulated camera at the specified location. Submit to test geolocation pipeline.
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Full-Width Detection Object Panel -->
@@ -715,8 +768,8 @@ async def get_dashboard():
 
                 // Background: gradient representing video
                 const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-                gradient.addColor('#667eea', 0);
-                gradient.addColor('#764ba2', 1);
+                gradient.addColorStop(0, '#667eea');
+                gradient.addColorStop(1, '#764ba2');
                 ctx.fillStyle = gradient;
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -824,23 +877,22 @@ async def get_dashboard():
                     try {
                         const detection = JSON.parse(event.data);
 
-                        // Only add if this is from current adapter
-                        if (detection.adapter_id === currentAdapterId) {
-                            document.getElementById('last-update').textContent = new Date(detection.timestamp).toLocaleTimeString();
+                        document.getElementById('last-update').textContent = new Date(detection.timestamp).toLocaleTimeString();
 
-                            if (detection.status === 'success') {
-                                addDetection({
-                                    class: detection.ai_confidence > 0.9 ? 'landmark' : 'landmark',
-                                    confidence: detection.ai_confidence,
-                                    id: detection.detection_id || 'DET-' + Date.now(),
-                                    timestamp: detection.timestamp,
-                                    confidence_flag: detection.confidence_flag,
-                                    cot_xml: detection.cot_xml
-                                });
-                            }
+                        if (detection.status === 'success') {
+                            addDetection({
+                                class: detection.ai_confidence > 0.9 ? 'landmark' : 'landmark',
+                                confidence: detection.ai_confidence,
+                                id: detection.detection_id || 'DET-' + Date.now(),
+                                timestamp: detection.timestamp,
+                                confidence_flag: detection.confidence_flag,
+                                cot_xml: detection.cot_xml,
+                                adapter_id: detection.adapter_id,
+                                adapter_name: detection.adapter_name
+                            });
                         }
                     } catch (e) {
-                        console.log('Event parse:', e);
+                        console.log('Event parse error:', e, 'data:', event.data);
                     }
                 };
 
@@ -880,6 +932,7 @@ async def get_dashboard():
                     <li class="detection-item">
                         <div class="detection-class">🎯 ${detection.class}</div>
                         <div style="margin-top: 5px; font-size: 0.85em; color: #666;">
+                            <strong>Source:</strong> ${detection.adapter_name || 'Unknown'}<br>
                             <strong>ID:</strong> ${detection.id.substring(0, 12)}...<br>
                             <strong>Time:</strong> ${new Date(detection.timestamp).toLocaleTimeString()}
                         </div>
@@ -968,6 +1021,60 @@ async def get_dashboard():
             function updateStats() {
                 document.getElementById('detection-count').textContent = detectionCount;
                 document.getElementById('cot-count').textContent = cotCount;
+            }
+
+            function setPreset(preset) {
+                document.getElementById('sim-lat').value = preset.lat;
+                document.getElementById('sim-lon').value = preset.lon;
+                document.getElementById('sim-elev').value = preset.elev;
+                document.getElementById('sim-heading').value = 0;
+            }
+
+            async function submitSimulation() {
+                const lat = parseFloat(document.getElementById('sim-lat').value);
+                const lon = parseFloat(document.getElementById('sim-lon').value);
+                const elev = parseFloat(document.getElementById('sim-elev').value);
+                const heading = parseFloat(document.getElementById('sim-heading').value) || 0;
+
+                if (isNaN(lat) || isNaN(lon) || isNaN(elev)) {
+                    alert('Please fill in all location fields');
+                    return;
+                }
+
+                if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+                    alert('Invalid coordinates (lat: -90 to 90, lon: -180 to 180)');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/simulator/submit', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            latitude: lat,
+                            longitude: lon,
+                            elevation: elev,
+                            heading: heading
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        alert('✅ Simulated detection submitted!\\nCheck detections panel for results.');
+                        // Connect to stream if not already connected
+                        if (!eventSource || eventSource.readyState !== EventSource.OPEN) {
+                            connectToEventStream();
+                        }
+                    } else {
+                        alert('Error: ' + (result.detail || 'Unknown error'));
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error: ' + error.message);
+                }
             }
 
             // Initialize on page load
@@ -1128,6 +1235,87 @@ async def detections_stream():
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.post("/api/simulator/submit")
+async def simulator_submit(data: SimulatorRequest):
+    """Submit simulated camera telemetry to geolocation engine"""
+    latitude = data.latitude
+    longitude = data.longitude
+    elevation = data.elevation
+    heading = data.heading
+    # Random pixel coordinates for detection (center of image with small variance)
+    pixel_x = float(np.random.normal(960, 100))  # Center around middle of 1920px width
+    pixel_y = float(np.random.normal(720, 80))   # Center around middle of 1440px height
+
+    # Clamp to valid range
+    pixel_x = max(0, min(1920, pixel_x))
+    pixel_y = max(0, min(1440, pixel_y))
+
+    # Random object class
+    object_classes = ["person", "vehicle", "building", "landmark"]
+    object_class = np.random.choice(object_classes)
+
+    # Random confidence
+    ai_confidence = float(np.random.uniform(0.75, 0.98))
+
+    payload = {
+        "image_base64": MINIMAL_PNG,
+        "pixel_x": pixel_x,
+        "pixel_y": pixel_y,
+        "object_class": object_class,
+        "ai_confidence": ai_confidence,
+        "source": "web-simulator",
+        "camera_id": "simulator",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "sensor_metadata": {
+            "location_lat": latitude,
+            "location_lon": longitude,
+            "location_elevation": elevation,
+            "heading": float(heading),
+            "pitch": float(np.random.uniform(-30, 30)),
+            "roll": 0.0,
+            "focal_length": 3000.0,
+            "sensor_width_mm": 6.4,
+            "sensor_height_mm": 4.8,
+            "image_width": 1920,
+            "image_height": 1440,
+        },
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                "http://localhost:8000/api/v1/detections",
+                json=payload,
+            )
+
+        if response.status_code == 201:
+            return {
+                "status": "success",
+                "message": "Simulated detection processed",
+                "location": {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "elevation": elevation,
+                    "heading": heading
+                },
+                "detection": {
+                    "object_class": object_class,
+                    "ai_confidence": ai_confidence,
+                    "pixel_x": pixel_x,
+                    "pixel_y": pixel_y
+                },
+                "detection_id": response.headers.get('X-Detection-ID'),
+                "confidence_flag": response.headers.get('X-Confidence-Flag')
+            }
+        else:
+            raise HTTPException(status_code=response.status_code, detail=f"Geolocation engine error: {response.text}")
+
+    except httpx.ConnectError:
+        raise HTTPException(status_code=503, detail="Geolocation engine not running on http://localhost:8000")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing simulation: {str(e)}")
 
 
 if __name__ == "__main__":
