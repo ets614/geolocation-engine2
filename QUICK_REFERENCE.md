@@ -68,7 +68,7 @@ In browser at **http://localhost:8888:**
 ## Why Previous Tokens Failed
 
 ```
-Token provided:  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 (looks truncated)
+Token provided:  hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (looks truncated)
 Expected length: ~40-50 characters
 Issue:          Token might be incomplete or not set in environment
 ```

@@ -30,7 +30,7 @@ export HF_API_KEY="hf_your_actual_token_here"
 
 **Example:**
 ```bash
-export HF_API_KEY="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"
+export HF_API_KEY="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ```
 
 ---
@@ -189,7 +189,7 @@ Once you have real HuggingFace detections working:
 
 ```bash
 # 1. Set your token (replace with YOUR actual token)
-export HF_API_KEY="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"
+export HF_API_KEY="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
 # 2. Start system
 bash run_complete_system.sh
