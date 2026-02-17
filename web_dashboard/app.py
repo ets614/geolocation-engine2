@@ -59,46 +59,42 @@ MINIMAL_PNG = base64.b64encode(
 ).decode()
 
 FEEDS = {
-    # ===== REAL AI DETECTION FEEDS =====
-    "roboflow-coco": {
-        "name": "🤖 Roboflow COCO (Real AI)",
+    # ===== LOCAL INFERENCE GENERATOR FEEDS =====
+    "inference-urban": {
+        "name": "🏙️ Urban Scene Detector",
         "lat": 40.7128,
         "lon": -74.0060,
         "elevation": 10.0,
-        "description": "Real-time AI object detection (80 classes: people, vehicles, animals, etc.)",
-        "icon": "🤖",
-        "category": "Real AI",
-        "requires_api_key": "ROBOFLOW_API_KEY"
+        "description": "High-confidence object detection in urban environments",
+        "icon": "🏙️",
+        "category": "Inference",
     },
-    "roboflow-logos": {
-        "name": "🏷️ Roboflow Logos (Real AI)",
+    "inference-mixed": {
+        "name": "🎯 Mixed Scene Detector",
         "lat": 40.7128,
         "lon": -74.0060,
         "elevation": 10.0,
-        "description": "Real-time logo and brand detection",
-        "icon": "🏷️",
-        "category": "Real AI",
-        "requires_api_key": "ROBOFLOW_API_KEY"
+        "description": "Balanced confidence detection for diverse scenes",
+        "icon": "🎯",
+        "category": "Inference",
     },
-    "huggingface-detr": {
-        "name": "🤗 HuggingFace DETR (Real AI)",
+    "inference-wildlife": {
+        "name": "🦁 Wildlife Detector",
         "lat": 40.7128,
         "lon": -74.0060,
         "elevation": 10.0,
-        "description": "High-accuracy object detection from HuggingFace (30,000 free inferences/month)",
-        "icon": "🤗",
-        "category": "Real AI",
-        "requires_api_key": "HF_API_KEY"
+        "description": "Object detection optimized for wildlife and nature",
+        "icon": "🦁",
+        "category": "Inference",
     },
-    "huggingface-yolos": {
-        "name": "⚡ HuggingFace YOLOS (Fast AI)",
+    "inference-high-confidence": {
+        "name": "✅ High Confidence Detector",
         "lat": 40.7128,
         "lon": -74.0060,
         "elevation": 10.0,
-        "description": "Fast real-time detection from HuggingFace",
-        "icon": "⚡",
-        "category": "Real AI",
-        "requires_api_key": "HF_API_KEY"
+        "description": "Very high confidence detections only",
+        "icon": "✅",
+        "category": "Inference",
     },
 }
 
@@ -421,6 +417,33 @@ async def get_dashboard():
                 transform: translateY(0);
             }
 
+            .copy-button {
+                background: rgba(255, 255, 255, 0.2);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                color: white;
+                padding: 6px 12px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 0.85em;
+                font-weight: 500;
+                transition: all 0.2s;
+                margin-left: auto;
+            }
+
+            .copy-button:hover {
+                background: rgba(255, 255, 255, 0.3);
+                border-color: rgba(255, 255, 255, 0.5);
+            }
+
+            .copy-button:active {
+                transform: scale(0.95);
+            }
+
+            .copy-button.copied {
+                background: #10b981;
+                border-color: #059669;
+            }
+
             .stats {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
@@ -691,6 +714,9 @@ async def get_dashboard():
                 <div class="panel-header">
                     <span>🔍</span>
                     <span>Raw Detection Object (JSON)</span>
+                    <button class="copy-button" onclick="copyToClipboard('detection-object-output')">
+                        📋 Copy JSON
+                    </button>
                 </div>
                 <div class="panel-body">
                     <div class="cot-xml" id="detection-object-output">
@@ -708,6 +734,9 @@ async def get_dashboard():
                 <div class="panel-header">
                     <span>📋</span>
                     <span>Generated CoT/TAK XML</span>
+                    <button class="copy-button" onclick="copyToClipboard('cot-output')">
+                        📋 Copy XML
+                    </button>
                 </div>
                 <div class="panel-body">
                     <div class="cot-xml" id="cot-output">
@@ -1095,6 +1124,44 @@ async def get_dashboard():
                     console.error('Error:', error);
                     alert('Error: ' + error.message);
                 }
+            }
+
+            function copyToClipboard(elementId) {
+                const element = document.getElementById(elementId);
+                const button = event.target.closest('.copy-button');
+
+                // Get text content (strip HTML if present)
+                let textToCopy = '';
+                if (element.querySelector('.empty-state')) {
+                    // Empty state - nothing to copy
+                    alert('No content to copy yet');
+                    return;
+                }
+
+                // Extract text from the element
+                const preElement = element.querySelector('pre');
+                if (preElement) {
+                    textToCopy = preElement.textContent;
+                } else {
+                    textToCopy = element.textContent;
+                }
+
+                // Copy to clipboard
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    // Show feedback
+                    const originalText = button.textContent;
+                    button.textContent = '✅ Copied!';
+                    button.classList.add('copied');
+
+                    // Reset after 2 seconds
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                        button.classList.remove('copied');
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy:', err);
+                    alert('Failed to copy to clipboard');
+                });
             }
 
             // Initialize on page load
