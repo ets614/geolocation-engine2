@@ -1326,34 +1326,27 @@ async def detections_stream():
 
 @app.post("/api/simulator/submit")
 async def simulator_submit(data: SimulatorRequest):
-    """Submit simulated camera telemetry with real HuggingFace AI detections"""
+    """Submit simulated camera telemetry with local inference detections"""
+    from adapters.inference_generator import InferenceGenerator
+
     latitude = data.latitude
     longitude = data.longitude
     elevation = data.elevation
     heading = data.heading
 
-    # Get real AI detections from HuggingFace
-    detections = []
-    if not HuggingFaceDetector:
-        raise HTTPException(
-            status_code=503,
-            detail="HuggingFace adapter not available. Set HF_API_KEY environment variable."
-        )
-
+    # Get detections from local inference generator
     try:
-        detector = HuggingFaceDetector(model="facebook/detr-resnet-50", confidence_threshold=0.5)
-        detections = await detector.detect_and_convert_pixels(MINIMAL_PNG)
+        generator = InferenceGenerator()
+        detections = generator.generate_detections(num_objects=np.random.randint(1, 4))
 
         if not detections:
             raise HTTPException(
                 status_code=400,
-                detail="No detections found in image. Try again or check HuggingFace API status."
+                detail="Failed to generate detections."
             )
 
-    except ValueError as e:
-        raise HTTPException(status_code=503, detail=f"HuggingFace API error: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error running AI detection: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating detections: {str(e)}")
 
     # Send each detection to geolocation engine
     processed = []
